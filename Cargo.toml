@@ -1,0 +1,20 @@
+[package]
+name = "tietaja"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bevy = { version = "0.20", default-features = false, features = ["2d", "ui", "png", "audio"] }
+
+# Bevy is slow unoptimized; optimize dependencies even in dev builds.
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
+
+# Smaller, faster WASM for `trunk build --release`.
+[profile.release]
+opt-level = "s"
+lto = "thin"
+codegen-units = 1

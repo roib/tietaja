@@ -1,0 +1,307 @@
+# Tietäjä: the origin of fire (demo)
+#
+# Everything in the game lives in this file: characters, items, rooms and dialogue.
+#
+#   character <Name>: #rrggbb [| voice <dir> <seconds per syllable>]
+#                                              speaker colour and babble voice
+#   item <id>: <Name> | <icon image>
+#   room <id>: <Name>
+#     background: <image>
+#     floor: <top y> <bottom y>                where the player can walk (feet)
+#     enter: <node>                            node run every time you enter
+#     music: <file>                            looping music (rooms sharing a file keep playing)
+#     hotspot <id>: <Name> | x y w h [| sprite <image>] [| if <conditions>]
+#     exit <id>: <Name> | x y w h | to <room> <x>
+#
+#   player: <Name>                           who the player is
+#   start: <room> <x>                        where the game begins
+#   intro: <node>                            node run when the game starts
+#   ending_music: <file>                     music after `win`
+#
+# Coordinates are pixels from the top-left of the 320x144 room image.
+#
+# Clicking a hotspot runs the node named <verb>_<hotspot>, e.g. look_hearth.
+# Using an item on a hotspot runs use_<item>_<hotspot>, e.g. use_bread_stone.
+# If no node exists, default_<verb> runs instead.
+#
+# Node lines (any line can start with [conditions], e.g. [knows_fire !fire_lit]):
+#   Speaker: text           say a line, click to continue
+#   choice text -> node     offer a choice (shown when the node finishes; "end" closes)
+#   jump <node>             continue in another node
+#   set / clear <flag>      remember or forget something
+#   give / remove <item>    change the inventory (holding an item counts as a flag)
+#   goto <room> <x>         move to another room
+#   end                     stop here
+#   win                     finish the game
+
+player: Vilja
+start: village 100
+intro: intro
+ending_music: music/ending.ogg
+
+character Vilja: #f4f0e6 | voice voices/vilja 0.075
+character Kyllikki: #f0c46a | voice voices/kyllikki 0.1
+character Magpie: #9ec3ff | voice voices/magpie 0.12
+character Voice: #a8f0b0 | voice voices/spirit 0.3
+
+item bread: Rye bread | items/bread.png
+item button: Bronze button | items/button.png
+item spindle: Spindle | items/spindle.png
+item tinder: Tinder fungus | items/tinder.png
+
+room village: Kylä, the village
+  background: rooms/village.png
+  music: music/village.ogg
+  floor: 112 140
+  hotspot sauna: Sauna | 12 40 82 62
+  hotspot house: Kyllikki's house | 180 30 124 74
+  hotspot hearth: Cold hearth | 130 98 44 24
+  hotspot stump: Stump | 46 101 24 19
+  hotspot kyllikki: Old Kyllikki | 228 68 18 48 | sprite chars/kyllikki.png
+  hotspot bread: Rye bread | 51 97 14 8 | sprite objects/bread.png | if !took_bread
+  hotspot button: Something shiny | 176 126 6 6 | sprite objects/button.png | if !took_button
+  hotspot fire: Fire | 137 84 30 22 | sprite objects/fire.png | if fire_lit
+  exit path: Forest path | 304 60 16 84 | to path 20
+
+room path: Polku, the forest path
+  background: rooms/path.png
+  music: music/path.ogg
+  floor: 118 140
+  hotspot spruce: Old spruce | 128 0 64 112
+  hotspot anthill: Anthill | 230 100 40 22
+  hotspot magpie: Magpie | 176 40 16 12 | sprite chars/magpie.png | if !magpie_gone
+  exit village: Back to the village | 0 60 16 84 | to village 296
+  exit grove: Deeper into the forest | 304 60 16 84 | to grove 20
+
+room grove: Hiisi, the sacred grove
+  background: rooms/grove.png
+  music: music/grove.ogg
+  enter: grove_enter
+  floor: 114 140
+  hotspot birch: Ancient birch | 186 0 46 114
+  hotspot stone: Offering stone | 98 98 44 24
+  hotspot tinder: Tinder fungus | 210 64 14 8 | sprite objects/tinder.png | if !took_tinder
+  hotspot skull: Bear skull | 250 56 14 12 | sprite objects/skull.png
+  exit path: Back to the path | 0 60 16 84 | to path 296
+
+# ---------------------------------------------------------------- defaults
+
+node default_look
+  Vilja: Nothing special about it.
+
+node default_take
+  Vilja: I can't carry that.
+
+node default_use
+  Vilja: That doesn't do anything.
+
+node default_talk
+  Vilja: It doesn't answer. Most things don't.
+
+node default_use_item
+  Vilja: That won't work.
+
+# ---------------------------------------------------------------- village
+
+node intro
+  Vilja: The fire went out in the night.
+  Vilja: Kyllikki says a fire that dies on its own has to be born again. Properly. With the old words.
+  Vilja: Grandfather knew all the words. But now there's only me.
+
+node look_hearth
+  [fire_lit] Vilja: It's burning happily. I did that.
+  [!fire_lit] Vilja: Cold ashes. Not a single ember left.
+
+node use_hearth
+  [!knows_fire] Vilja: Rubbing sticks together won't do. A dead fire has to be sung back to life.
+  [knows_fire] Vilja: I know the words now. But I need something dry that will catch the first spark.
+
+node look_fire
+  Vilja: Born again, and hungry. I'd better find more wood.
+
+node take_hearth
+  Vilja: The stones are heavier than they look. And they look heavy.
+
+node use_tinder_hearth
+  [!knows_fire] Vilja: The tinder is ready, but I don't know the origin of fire. Without the words, it's just a mushroom.
+  [!knows_fire] end
+  Vilja: (singing) Ukko, the old one, struck fire in the sky, with a sword of flame, with a fiery blade...
+  Vilja: The spark fell through the nine heavens, down to the dark earth, into the hand of the one who calls it!
+  remove tinder
+  set fire_lit
+  Kyllikki: Ha! Look at that. The fire remembers where it was born.
+  Kyllikki: You'll make a tietäjä yet, child.
+  win
+
+node look_kyllikki
+  Vilja: Old Kyllikki. She's been old for as long as anyone can remember.
+
+node take_kyllikki
+  Vilja: She'd hit me with her stick. Again.
+
+node talk_kyllikki
+  [fire_lit] Kyllikki: Keep it fed and it'll keep you warm. That's the whole bargain.
+  [fire_lit] end
+  [!met_kyllikki] Kyllikki: Vilja! Don't stand there gaping. The hearth is cold and so are my bones.
+  [met_kyllikki] Kyllikki: Well?
+  set met_kyllikki
+  jump kyllikki_menu
+
+node kyllikki_menu
+  choice [!knows_fire] Do you know the origin of fire? -> kyllikki_fire
+  choice [knows_fire] Where can I find tinder? -> kyllikki_tinder
+  choice Why does the fire have to be sung back? -> kyllikki_why
+  choice Goodbye. -> end
+
+node kyllikki_fire
+  Kyllikki: Of course I know it. Every old woman knows it.
+  Kyllikki: But I can't think straight without my spindle. My hands need something to do.
+  Kyllikki: That thieving magpie flew off with it into the forest. Bring it back and I'll teach you.
+  jump kyllikki_menu
+
+node kyllikki_tinder
+  Kyllikki: Tinder fungus grows on the old birch in the sacred grove.
+  Kyllikki: But the grove gives nothing for free. Leave it a gift first.
+  jump kyllikki_menu
+
+node kyllikki_why
+  Kyllikki: Know where a thing was born, and it has to listen to you. That's all a tietäjä really is.
+  Kyllikki: Fire, iron, bears, snakebites. Everything has its origin. Learn them and you're never helpless.
+  jump kyllikki_menu
+
+node use_spindle_kyllikki
+  remove spindle
+  set knows_fire
+  Kyllikki: My spindle! Look at it, all pecked. That bird has no shame.
+  Kyllikki: A promise is a promise. Listen closely.
+  Kyllikki: Ukko, the old one, struck fire in the sky, with a sword of flame... and the spark fell through the nine heavens into the hand of the one who calls it.
+  Vilja: Ukko, the old one, struck fire in the sky...
+  Kyllikki: Good. Now you know the origin of fire.
+  Kyllikki: You'll need tinder to catch it. The old birch in the grove grows the best. But leave a gift for the grove first.
+
+node use_bread_kyllikki
+  Kyllikki: Keep it. You're too thin anyway.
+
+node use_button_kyllikki
+  Kyllikki: A button? What am I going to do with one button?
+
+node look_bread
+  Vilja: Kyllikki's rye bread. Hard enough to build a house with.
+
+node take_bread
+  give bread
+  set took_bread
+  Vilja: Kyllikki always says I'm too thin anyway.
+
+node look_button
+  Vilja: A bronze button from someone's coat. Very shiny.
+
+node take_button
+  give button
+  set took_button
+  Vilja: Finders keepers.
+
+node look_spindle
+  Vilja: Kyllikki's spindle, a little pecked.
+
+node look_tinder
+  [took_tinder] Vilja: Dry tinder fungus from the old birch. It'll catch a spark like nothing else.
+  [!took_tinder] Vilja: Tinder fungus, growing on the birch like a big hoof. Dried, it catches a spark like nothing else.
+
+node look_sauna
+  Vilja: The sauna. Grandmother always said the sauna spirit gets cranky if you swear in there.
+
+node use_sauna
+  Vilja: No time for bathing. Well, there's always time for bathing. But not now.
+
+node look_house
+  Vilja: Kyllikki's house. It smells of smoke and dried fish, which is to say, of home.
+
+node use_house
+  Vilja: Kyllikki doesn't like people in her house when she isn't in it. Or when she is.
+
+node look_stump
+  Vilja: A stump. Every yard has one.
+
+# ---------------------------------------------------------------- forest path
+
+node look_magpie
+  Vilja: The magpie! And in its beak... Kyllikki's spindle.
+
+node talk_magpie
+  Magpie: Kchak! Kchak-kchak!
+  Vilja: I don't think it's just going to give it back.
+
+node take_magpie
+  Vilja: It pecks my fingers. Thief! Biter!
+
+node use_bread_magpie
+  Magpie: Kchak.
+  Vilja: It looks at the bread with total contempt. Fair enough.
+
+node use_button_magpie
+  Vilja: Look, something shiny! Want to trade?
+  Magpie: Kchak!
+  remove button
+  give spindle
+  set magpie_gone
+  Vilja: It dropped the spindle, grabbed the button and flew off. A fine bargain, for a bird.
+
+node look_spruce
+  Vilja: An old spruce. They say a tree like this can keep a person's soul safe in its roots.
+
+node take_spruce
+  Vilja: All of it?
+
+node look_anthill
+  Vilja: An anthill as tall as my knees. Busy little people.
+
+node take_anthill
+  Vilja: And get bitten in places I'd rather not mention? No.
+
+node talk_anthill
+  Vilja: Good morning, ant folk. Have you seen a magpie?
+  Vilja: They're too busy to answer.
+
+# ---------------------------------------------------------------- sacred grove
+
+node grove_enter
+  [!been_in_grove] Vilja: Hiisi, the sacred grove. Nobody comes here without a reason.
+  set been_in_grove
+
+node look_birch
+  Vilja: The oldest birch in the forest. Kyllikki says it was old when her grandmother was young.
+
+node take_tinder
+  [!offered] Voice: Who takes from Hiisi without giving?
+  [!offered] Vilja: ...Nobody. I was only looking. Respectfully.
+  [!offered] end
+  give tinder
+  set took_tinder
+  Vilja: Thank you, grove. I'll take good care of it.
+
+node look_stone
+  [!offered] Vilja: An offering stone. Its hollow is worn smooth by a hundred generations of gifts.
+  [offered] Vilja: The bread is gone already. Something here was hungry.
+
+node talk_stone
+  Vilja: Hello, stone. I'd like to leave something in your hollow, if that's all right.
+
+node use_bread_stone
+  remove bread
+  set offered
+  Vilja: For the forest, for Tapio, for the grove. The first bread of the day.
+  Voice: ...Accepted.
+  Vilja: Did the trees just sigh?
+
+node use_button_stone
+  Vilja: A button? The grove would think I was making fun of it.
+
+node look_skull
+  Vilja: A bear's skull, hung high on the pine so the bear's spirit can find its way home.
+
+node talk_skull
+  Vilja: Rest well, forest grandfather.
+
+node take_skull
+  Vilja: Absolutely not.
