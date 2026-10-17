@@ -15,7 +15,8 @@ use story::{Choice, Dialogue, GameState, ROOM_HEIGHT, ROOM_WIDTH, Step, Story, V
 /// The room view takes the top of the window; the verb panel takes the rest.
 const SCENE_FRACTION: f32 = 0.72;
 const WALK_SPEED: f32 = 70.0;
-const PLAYER_HEIGHT: f32 = 40.0;
+const PLAYER_SIZE: Vec2 = Vec2::new(14.0, 40.0);
+const PLAYER_HEIGHT: f32 = PLAYER_SIZE.y;
 
 const PANEL_BG: Color = Color::srgb(0.1, 0.07, 0.05);
 const SENTENCE_COLOR: Color = Color::srgb(0.62, 0.84, 0.62);
@@ -143,7 +144,6 @@ fn main() {
     App::new()
         .add_plugins(
             DefaultPlugins
-                .set(ImagePlugin::default_nearest())
                 .set(WindowPlugin {
                     primary_window: Some(Window {
                         title: "Tietäjä".into(),
@@ -226,7 +226,7 @@ fn setup(mut commands: Commands, assets: Res<AssetServer>, story: Res<StoryRes>)
     ));
 
     commands.spawn((
-        Sprite::from_image(assets.load("chars/vilja.png")),
+        Sprite { custom_size: Some(PLAYER_SIZE), ..Sprite::from_image(assets.load("chars/vilja.png")) },
         Anchor::BOTTOM_CENTER,
         PlayerSprite,
     ));
@@ -510,7 +510,15 @@ fn sync_room(
         commands.entity(entity).despawn();
     }
     let room = story.0.room(&game.0.room);
-    commands.spawn((Sprite::from_image(assets.load(room.background.clone())), Transform::default(), RoomEntity));
+    // Art is painted at a higher resolution than the room; draw everything at room size.
+    commands.spawn((
+        Sprite {
+            custom_size: Some(Vec2::new(ROOM_WIDTH, ROOM_HEIGHT)),
+            ..Sprite::from_image(assets.load(room.background.clone()))
+        },
+        Transform::default(),
+        RoomEntity,
+    ));
     for hotspot in room.hotspots.iter().filter(|h| game.0.check(&h.conds)) {
         let Some(sprite) = &hotspot.sprite else {
             continue;
@@ -518,7 +526,10 @@ fn sync_room(
         let (cx, cy) = hotspot.rect.center();
         let depth = 1.0 + (hotspot.rect.y + hotspot.rect.h) / 1000.0;
         commands.spawn((
-            Sprite::from_image(assets.load(sprite.clone())),
+            Sprite {
+                custom_size: Some(Vec2::new(hotspot.rect.w, hotspot.rect.h)),
+                ..Sprite::from_image(assets.load(sprite.clone()))
+            },
             Transform::from_translation(room_to_world(Vec2::new(cx, cy)).extend(depth)),
             RoomEntity,
         ));

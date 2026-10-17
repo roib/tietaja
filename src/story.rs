@@ -639,6 +639,37 @@ mod tests {
         assert!(missing.is_empty(), "missing assets: {missing:?}");
     }
 
+    /// The game stretches each image to its room or hotspot size, so painted art must be
+    /// exactly ART_SCALE times larger or it would be distorted.
+    #[test]
+    fn art_matches_room_and_hotspot_sizes() {
+        const ART_SCALE: f32 = 4.0;
+        fn png_size(path: &std::path::Path) -> (u32, u32) {
+            let bytes = std::fs::read(path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+            let be = |i: usize| u32::from_be_bytes(bytes[i..i + 4].try_into().unwrap());
+            (be(16), be(20))
+        }
+        let story = Story::parse(STORY).unwrap();
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets");
+        let mut wrong = Vec::new();
+        for room in &story.rooms {
+            let expected = ((ROOM_WIDTH * ART_SCALE) as u32, (ROOM_HEIGHT * ART_SCALE) as u32);
+            let actual = png_size(&root.join(&room.background));
+            if actual != expected {
+                wrong.push(format!("{}: {actual:?}, expected {expected:?}", room.background));
+            }
+            for h in &room.hotspots {
+                let Some(sprite) = &h.sprite else { continue };
+                let expected = ((h.rect.w * ART_SCALE) as u32, (h.rect.h * ART_SCALE) as u32);
+                let actual = png_size(&root.join(sprite));
+                if actual != expected {
+                    wrong.push(format!("{sprite} (hotspot {}): {actual:?}, expected {expected:?}", h.id));
+                }
+            }
+        }
+        assert!(wrong.is_empty(), "art at the wrong size:\n  {}", wrong.join("\n  "));
+    }
+
     #[test]
     fn validation_catches_typos() {
         let src = "start: a 10\nroom a: A\n  exit e: E | 0 0 1 1 | to nowhere 5\nnode n\n  jump missing\n  give ghost\n";
