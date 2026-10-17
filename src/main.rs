@@ -12,13 +12,18 @@ use bevy::{
 };
 use story::{Choice, Dialogue, GameState, ROOM_HEIGHT, ROOM_WIDTH, Step, Story, VOICE_SYLLABLES, Verb};
 
-/// The room view takes the top of the window; the verb panel takes the rest.
-const SCENE_FRACTION: f32 = 0.72;
+/// The painting and the verb panel beneath it form one framed block, centered in the
+/// window. The panel is this fraction of the painting's height.
+const PANEL_RATIO: f32 = 0.4;
 const WALK_SPEED: f32 = 70.0;
 const PLAYER_SIZE: Vec2 = Vec2::new(14.0, 40.0);
 const PLAYER_HEIGHT: f32 = PLAYER_SIZE.y;
 
 const PANEL_BG: Color = Color::srgb(0.1, 0.07, 0.05);
+/// Like a painting hung on a dark wall: a wooden frame with a gilt fillet.
+const WALL: Color = Color::srgb(0.06, 0.045, 0.035);
+const FRAME_WOOD: Color = Color::srgb(0.2, 0.13, 0.075);
+const FRAME_GILT: Color = Color::srgb(0.74, 0.6, 0.32);
 const SENTENCE_COLOR: Color = Color::srgb(0.62, 0.84, 0.62);
 const VERB_COLOR: Color = Color::srgb(0.55, 0.45, 0.32);
 const VERB_HOVER: Color = Color::srgb(0.98, 0.86, 0.55);
@@ -112,6 +117,12 @@ struct SpeechBox;
 struct SpeechText;
 
 #[derive(Component)]
+struct Panel;
+
+#[derive(Component)]
+struct Frame;
+
+#[derive(Component)]
 struct VerbPanel;
 
 #[derive(Component)]
@@ -153,7 +164,7 @@ fn main() {
                     ..default()
                 }),
         )
-        .insert_resource(ClearColor(Color::BLACK))
+        .insert_resource(ClearColor(WALL))
         .insert_resource(Game(GameState { room: start_room, ..default() }))
         .insert_resource(Player {
             pos: Vec2::new(start_x, (floor.0 + floor.1) / 2.0),
@@ -170,7 +181,7 @@ fn main() {
         .add_systems(Update, (apply_font, toggle_sound, play_music, play_babble, scale_ui))
         .add_systems(
             Update,
-            (update_viewport, handle_pointer, hover_items, move_player, run_dialogue).chain(),
+            (layout, handle_pointer, hover_items, move_player, run_dialogue).chain(),
         )
         .add_systems(
             Update,
@@ -229,6 +240,11 @@ fn setup(mut commands: Commands, assets: Res<AssetServer>, story: Res<StoryRes>)
         Sprite { custom_size: Some(PLAYER_SIZE), ..Sprite::from_image(assets.load("chars/vilja.png")) },
         Anchor::BOTTOM_CENTER,
         PlayerSprite,
+        // A soft shadow at her feet, cast to the right like the painted shadows.
+        children![(
+            Sprite { custom_size: Some(Vec2::new(16.0, 4.0)), ..Sprite::from_image(assets.load("objects/shadow.png")) },
+            Transform::from_xyz(3.0, 0.5, -0.0005),
+        )],
     ));
 
     // Speech floats above whoever is talking.
@@ -239,7 +255,7 @@ fn setup(mut commands: Commands, assets: Res<AssetServer>, story: Res<StoryRes>)
             Text::default(),
             TextFont { font_size: FontSize::Px(22.0), ..default() },
             TextLayout::justify(Justify::Center),
-            TextShadow::default(),
+            TextShadow { offset: Vec2::splat(1.5), color: Color::srgba(0.05, 0.03, 0.02, 0.95) },
             SpeechText,
         )],
     ));
@@ -290,12 +306,23 @@ fn setup(mut commands: Commands, assets: Res<AssetServer>, story: Res<StoryRes>)
         .id();
     let inventory = commands
         .spawn((
-            Node { flex_grow: 1.0, flex_wrap: FlexWrap::Wrap, column_gap: px(8), row_gap: px(8), align_content: AlignContent::FlexStart, ..default() },
+            Node {
+                flex_grow: 1.0,
+                flex_wrap: FlexWrap::Wrap,
+                column_gap: px(8),
+                row_gap: px(8),
+                align_content: AlignContent::Center,
+                min_height: px(64),
+                padding: UiRect::left(px(20)),
+                border: UiRect::left(px(1)),
+                ..default()
+            },
+            BorderColor::all(FRAME_GILT.with_alpha(0.45)),
             InventoryBar,
         ))
         .id();
     let verb_panel = commands
-        .spawn((Node { flex_grow: 1.0, column_gap: px(16), ..default() }, VerbPanel))
+        .spawn((Node { flex_grow: 1.0, column_gap: px(20), align_items: AlignItems::Center, ..default() }, VerbPanel))
         .add_children(&[verb_grid, inventory])
         .id();
     let choices = commands
@@ -314,34 +341,87 @@ fn setup(mut commands: Commands, assets: Res<AssetServer>, story: Res<StoryRes>)
             SentenceText,
         ))
         .id();
+    // The frame is drawn around the painting and panel; `layout` sizes and places it.
+    commands.spawn((
+        Node { position_type: PositionType::Absolute, ..default() },
+        BorderColor::all(FRAME_WOOD),
+        Pickable::IGNORE,
+        Frame,
+        children![(
+            Node { width: percent(100), height: percent(100), border: UiRect::all(px(2)), ..default() },
+            BorderColor::all(FRAME_GILT),
+            Pickable::IGNORE,
+        )],
+    ));
     commands
         .spawn((
             Node {
                 position_type: PositionType::Absolute,
-                bottom: px(0),
-                width: percent(100),
-                height: percent((1.0 - SCENE_FRACTION) * 100.0),
                 flex_direction: FlexDirection::Column,
-                padding: UiRect::axes(px(16), px(8)),
+                padding: UiRect::axes(px(20), px(8)),
+                border: UiRect::top(px(2)),
                 row_gap: px(6),
                 ..default()
             },
             BackgroundColor(PANEL_BG),
+            BorderColor::all(FRAME_GILT),
+            Panel,
         ))
         .add_children(&[sentence, verb_panel, choices]);
 }
 
-fn update_viewport(window: Single<&Window>, mut camera: Single<&mut Camera, With<SceneCamera>>) {
-    let size = window.resolution.physical_size();
-    let scene = UVec2::new(size.x, (size.y as f32 * SCENE_FRACTION) as u32).max(UVec2::ONE);
-    if camera.viewport.as_ref().map(|v| v.physical_size) != Some(scene) {
-        camera.viewport = Some(Viewport { physical_position: UVec2::ZERO, physical_size: scene, ..default() });
+/// Fit the painting plus the panel beneath it into the window as one block, keeping the
+/// painting's shape, and frame it. The scene camera draws only inside the painting.
+fn layout(
+    window: Single<&Window>,
+    ui_scale: Res<UiScale>,
+    mut camera: Single<&mut Camera, With<SceneCamera>>,
+    mut panel: Single<&mut Node, (With<Panel>, Without<Frame>)>,
+    mut frame: Single<&mut Node, (With<Frame>, Without<Panel>)>,
+) {
+    let (ww, wh) = (window.width(), window.height());
+    let margin = (ww.min(wh) * 0.014).clamp(4.0, 16.0);
+    let painting_aspect = ROOM_WIDTH / ROOM_HEIGHT;
+    let block_aspect = painting_aspect / (1.0 + PANEL_RATIO);
+    let (aw, ah) = ((ww - 2.0 * margin).max(1.0), (wh - 2.0 * margin).max(1.0));
+    let (bw, bh) = if aw / ah > block_aspect { (ah * block_aspect, ah) } else { (aw, aw / block_aspect) };
+    let (bx, by) = ((ww - bw) / 2.0, (wh - bh) / 2.0);
+    let painting_h = bw / painting_aspect;
+
+    let scale = window.scale_factor();
+    let viewport = Viewport {
+        physical_position: (Vec2::new(bx, by) * scale).round().as_uvec2(),
+        physical_size: (Vec2::new(bw, painting_h) * scale).round().as_uvec2().max(UVec2::ONE),
+        ..default()
+    };
+    if camera.viewport.as_ref().map(|v| (v.physical_position, v.physical_size))
+        != Some((viewport.physical_position, viewport.physical_size))
+    {
+        camera.viewport = Some(viewport);
+    }
+
+    // UI units are window pixels divided by the UI scale.
+    let k = ui_scale.0;
+    let place = |node: &mut Node, x: f32, y: f32, w: f32, h: f32| {
+        let (left, top, width, height) = (px(x / k), px(y / k), px(w / k), px(h / k));
+        if node.left != left || node.top != top || node.width != width || node.height != height {
+            node.left = left;
+            node.top = top;
+            node.width = width;
+            node.height = height;
+        }
+    };
+    place(&mut panel, bx, by + painting_h, bw, bh - painting_h);
+    place(&mut frame, bx - margin, by - margin, bw + 2.0 * margin, bh + 2.0 * margin);
+    let border = UiRect::all(px(margin / k));
+    if frame.border != border {
+        frame.border = border;
     }
 }
 
 /// The room-pixel position under a window position, if it is over the room.
-fn point_in_room(window: &Window, camera: &Camera, transform: &GlobalTransform, pos: Vec2) -> Option<Vec2> {
-    if pos.y > window.height() * SCENE_FRACTION {
+fn point_in_room(camera: &Camera, transform: &GlobalTransform, pos: Vec2) -> Option<Vec2> {
+    if !camera.logical_viewport_rect()?.contains(pos) {
         return None;
     }
     let world = camera.viewport_to_world_2d(transform, pos).ok()?;
@@ -383,7 +463,7 @@ fn handle_pointer(
 
     let (camera, transform) = *camera;
     let pointer = tap.or_else(|| window.cursor_position());
-    let Some(p) = pointer.and_then(|pos| point_in_room(&window, camera, transform, pos)) else {
+    let Some(p) = pointer.and_then(|pos| point_in_room(camera, transform, pos)) else {
         ui.hover = None;
         return;
     };
@@ -701,8 +781,11 @@ fn update_speech(
     };
     // Computed in window pixels, then converted to UI units (window pixels / UiScale).
     let k = ui_scale.0;
-    let width = (window.width() * 0.5).clamp(240.0, 520.0);
-    node.left = px((screen.x - width / 2.0).clamp(8.0, (window.width() - width - 8.0).max(8.0)) / k);
+    // Keep the speech inside the painting.
+    let painting = camera.logical_viewport_rect().unwrap_or(Rect::new(0.0, 0.0, window.width(), window.height()));
+    let width = (painting.width() * 0.5).clamp(220.0, 520.0);
+    let left = (screen.x - width / 2.0).clamp(painting.min.x + 8.0, (painting.max.x - width - 8.0).max(painting.min.x + 8.0));
+    node.left = px(left / k);
     node.bottom = px((window.height() - screen.y.max(60.0)) / k);
     node.width = px(width / k);
     node.justify_content = JustifyContent::Center;
@@ -710,7 +793,7 @@ fn update_speech(
     let (mut text, mut color, mut font) = speech_text.into_inner();
     let rgb = story.characters.get(speaker).map_or([255, 255, 255], |c| c.color);
     color.0 = Color::srgb_u8(rgb[0], rgb[1], rgb[2]);
-    let size = (window.height() * SCENE_FRACTION / ROOM_HEIGHT * 6.0).clamp(15.0, 28.0) / k;
+    let size = (painting.height() / ROOM_HEIGHT * 6.0).clamp(15.0, 28.0) / k;
     if font.font_size != FontSize::Px(size) {
         font.font_size = FontSize::Px(size);
     }

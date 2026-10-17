@@ -117,38 +117,101 @@ def save(img, path):
 # ---------------------------------------------------------------- landscape pieces
 
 
-def sky(img, rng, top=SKY_TOP, haze=SKY_HAZE, horizon=0.75, clouds=6):
+def shifted(mask, dx, dy):
+    out = Image.new("L", mask.size, 0)
+    out.paste(mask, (int(dx), int(dy)))
+    return out
+
+
+def sky(img, rng, top=SKY_TOP, haze=SKY_HAZE, horizon=0.75, clouds=6, cloud_top=0.04, cloud_bottom=0.4):
+    """Luminous sky: deep blue overhead, warm haze at the horizon, and cumulus with
+    sunlit upper-left edges and cool grey-violet undersides."""
     d = ImageDraw.Draw(img)
     hz = int(H * horizon)
+    warm = (252, 226, 178)
     for y in range(H):
-        t = min(1.0, y / hz) ** 1.4
-        d.line([(0, y), (W, y)], fill=mix(top, haze, t) + (255,))
-    # Soft cumulus: bright tops, lavender-grey undersides.
+        t = min(1.0, y / hz)
+        col = mix(top, haze, t ** 1.3)
+        col = mix(col, warm, max(0.0, t - 0.75) * 1.4)
+        d.line([(0, y), (W, y)], fill=col + (255,))
     for _ in range(clouds):
-        cx, cy = rng.uniform(0, W), rng.uniform(H * 0.05, H * 0.35)
-        size = rng.uniform(40, 110)
-        lay = new_layer()
-        ld = ImageDraw.Draw(lay, "RGBA")
-        for _ in range(26):
-            x = cx + rng.gauss(0, size)
-            y = cy + rng.gauss(0, size * 0.25)
-            r = rng.uniform(size * 0.25, size * 0.55)
-            ld.ellipse([x - r, y - r * 0.7, x + r, y + r * 0.7], fill=(252, 246, 232, 90))
-        for _ in range(12):
-            x = cx + rng.gauss(0, size)
-            y = cy + size * 0.3 + rng.gauss(0, size * 0.08)
-            r = rng.uniform(size * 0.2, size * 0.4)
-            ld.ellipse([x - r, y - r * 0.4, x + r, y + r * 0.4], fill=(176, 170, 182, 50))
-        paint(img, lay, 8)
+        cx = rng.uniform(-W * 0.05, W * 1.05)
+        base = rng.uniform(H * cloud_top + s(14), H * cloud_bottom)
+        size = rng.uniform(s(20), s(36))
+        mask = Image.new("L", (W, H), 0)
+        md = ImageDraw.Draw(mask)
+        for _ in range(int(size / 1.5)):
+            x = cx + rng.gauss(0, size * 1.1)
+            r = rng.uniform(size * 0.25, size * 0.55) * (1.2 - abs(x - cx) / (size * 3))
+            if r <= 0:
+                continue
+            y = base - abs(rng.gauss(0, size * 0.35)) - r * 0.3  # heaped upward from a flat base
+            md.ellipse([x - r, y - r * 0.8, x + r, min(base, y + r * 0.8)], fill=255)
+        mask = mask.filter(ImageFilter.GaussianBlur(s(1.6)))
+        dist = (base / H) / cloud_bottom  # lower clouds are further away: hazier
+        shade = mix((150, 150, 172), haze, 0.25 + 0.4 * dist)
+        lit = mix((255, 250, 236), haze, 0.2 * dist)
+        # Sunlit across the upper body, fading to a cool grey-violet base.
+        body = Image.new("RGBA", (W, H))
+        bd = ImageDraw.Draw(body)
+        top_y = base - size * 1.4
+        for y in range(max(0, int(top_y - size)), min(H, int(base + s(4)))):
+            t = min(1.0, max(0.0, (y - top_y) / (base - top_y)))
+            bd.line([(0, y), (W, y)], fill=mix(lit, shade, t ** 1.6) + (255,))
+        body.putalpha(mask.point(lambda v: v * 240 // 255))
+        img.alpha_composite(body)
+        # A soft brighter crown where the heaped tops catch the sun.
+        crown = ImageChops.subtract(mask, shifted(mask, 0, -s(5))).filter(ImageFilter.GaussianBlur(s(3)))
+        light = Image.new("RGBA", (W, H), (255, 252, 242, 255))
+        light.putalpha(ImageChops.multiply(crown.point(lambda v: min(255, int(v * 1.2))), mask).point(lambda v: v * 150 // 255))
+        img.alpha_composite(light)
 
 
-def treeline(img, rng, base_y, height, color, blur, fade, count=60):
+def hills(img, rng, base_y, height, color, fade, x0=0, x1=W):
+    """A far ridge of blue-grey wooded hills, the Häme landscape's horizon."""
+    color = mix(color, SKY_HAZE, fade)
+    lay = new_layer()
+    d = ImageDraw.Draw(lay)
+    phase = [rng.uniform(0, 6.28) for _ in range(3)]
+    pts = [(x0, H)]
+    for x in range(int(x0), int(x1) + 8, 8):
+        u = x / W
+        y = base_y - height * (0.55 + 0.25 * math.sin(u * 5 + phase[0]) + 0.15 * math.sin(u * 13 + phase[1])
+                               + 0.05 * math.sin(u * 37 + phase[2]))
+        pts.append((x, y))
+    pts.append((x1, H))
+    d.polygon(pts, fill=color + (255,))
+    for _ in range(int((x1 - x0) / 3)):  # the soft texture of forest on far hills
+        x = rng.uniform(x0, x1)
+        y = base_y - rng.uniform(0, height * 0.5)
+        dab(d, x, y, rng.uniform(3, 8), rng.uniform(2, 4), vary(mix(color, (60, 80, 70), 0.12), rng, 5), 0, 6)
+    mask = Image.new("L", (W, H), 0)
+    ImageDraw.Draw(mask).polygon(pts, fill=255)
+    lay.putalpha(ImageChops.multiply(lay.getchannel("A"), mask))
+    paint(img, lay, 1.5)
+
+
+def lake(img, rng, y0, y1, x0=0, x1=W):
+    """Still water mirroring the bright sky, with soft horizontal glints."""
+    lay = new_layer()
+    d = ImageDraw.Draw(lay)
+    for y in range(int(y0), int(y1)):
+        t = (y - y0) / max(1, y1 - y0)
+        d.line([(x0, y), (x1, y)], fill=mix((214, 222, 222), (128, 150, 160), t) + (255,))
+    for _ in range(int((x1 - x0) / 4)):
+        x = rng.uniform(x0, x1)
+        y = rng.uniform(y0, y1)
+        dab(d, x, y, rng.uniform(6, 20), rng.uniform(0.6, 1.2), vary((246, 240, 222), rng, 6), 0, 6)
+    paint(img, lay, 0.8)
+
+
+def treeline(img, rng, base_y, height, color, blur, fade, count=60, x0=-s(4), x1=W + s(4)):
     """Distant forest edge: a wall of small spruces, paler and bluer with distance."""
     lay = new_layer()
-    ImageDraw.Draw(lay).rectangle([0, base_y - height * 0.15, W, H], fill=mix(color, SKY_HAZE, fade / 255) + (255,))
+    ImageDraw.Draw(lay).rectangle([x0, base_y - height * 0.15, x1, base_y + s(2)], fill=mix(color, SKY_HAZE, fade / 255) + (255,))
     paint(img, lay, blur)
-    x = -s(4)
-    while x < W + s(4):
+    x = x0
+    while x < x1:
         h = height * rng.uniform(0.55, 1.0)
         spruce(img, rng, x, base_y, h, h * rng.uniform(0.28, 0.4), 0.5, 0.2, blur, 0.0, fade / 255)
         x += rng.uniform(s(3), s(7))
@@ -293,6 +356,33 @@ def road(img, rng, pts, color=ROAD):
     paint(img, lay, 0.6)
 
 
+def road_details(img, rng, top_y, ruts=(s(124), s(133)), x0=0, x1=W):
+    """What makes a painted road read as a road: wheel ruts with lit rims, pebbles,
+    and grass tufts creeping in along the edges."""
+    lay = new_layer()
+    d = ImageDraw.Draw(lay)
+    for y0 in ruts:
+        pts = [(x, y0 + math.sin(x / s(30) + y0) * s(1.2)) for x in range(int(x0), int(x1) + 8, 8)]
+        d.line(pts, fill=(146, 116, 78, 255), width=round(s(1.1)))
+        d.line([(x, y + s(0.9)) for x, y in pts], fill=(222, 196, 146, 255), width=round(s(0.5)))
+    for _ in range(int((x1 - x0) / 5)):
+        x, y = rng.uniform(x0, x1), rng.uniform(top_y + s(4), H)
+        r = rng.uniform(1.5, 4.5)
+        d.ellipse([x - r, y - r * 0.6, x + r, y + r * 0.6], fill=vary((150, 140, 124), rng, 20))
+        d.arc([x - r, y - r * 0.6, x + r, y + r * 0.6], 180, 300, fill=(230, 220, 196, 255), width=1)
+    for _ in range(int((x1 - x0) / 1.5)):
+        x = rng.uniform(x0, x1)
+        y = top_y + abs(rng.gauss(0, s(3)))
+        d.line([(x, y), (x + rng.uniform(-2, 2), y - rng.uniform(s(1), s(3)))],
+               fill=vary(rng.choice(GRASS), rng, 12), width=2)
+    for _ in range(14):  # tufts out in the road
+        cx, cy = rng.uniform(x0, x1), rng.uniform(top_y + s(10), H)
+        for _ in range(12):
+            d.line([(cx + rng.uniform(-6, 6), cy), (cx + rng.uniform(-10, 10), cy - rng.uniform(s(1), s(2.5)))],
+                   fill=vary(rng.choice(GRASS), rng, 12), width=2)
+    paint(img, lay, 0.6)
+
+
 def rock(img, rng, x0, y0, x1, y1, moss=0.5):
     lay = new_layer()
     d = Canvas(lay)
@@ -334,70 +424,343 @@ def dapple(img, rng, top, count=60, alpha=60):
     paint(img, lay, 4)
 
 
-def log_building(img, rng, x0, y0, x1, y1, roof_h, door=None, window=None):
-    """Weathered log house, lit from the left, with a grey board roof."""
+WEATHERED = (140, 124, 102)  # sun-silvered pine logs
+
+
+def log_shade(t, across):
+    """Brightness of a point on a round log: t runs top (0) to bottom (1) of the log,
+    `across` is 0 at the sunlit end of the wall and 1 at the far end."""
+    roundness = 0.62 + 0.5 * math.sin(math.pi * (0.08 + 0.8 * t)) - 0.25 * t
+    return roundness * (1.08 - 0.22 * across)
+
+
+def farm_building(img, rng, x0, x1, side_x1, ground, wall_h, roof_h, rise, door=None, windows=(), side_window=None,
+                  chimney=False, sooty=False):
+    """A Finnish log building seen at an angle, as Holmberg painted them: the gable end
+    faces us in the sun, the long side recedes in shadow, under a weathered board roof.
+    All arguments are room units."""
+    X0, X1, XS, G = s(x0), s(x1), s(side_x1), s(ground)
+    top = G - s(wall_h)
+    peak = ((X0 + X1) / 2, top - s(roof_h))
+    ov = s(4)  # roof overhang
+    R = s(rise)
+    dw = XS - X1
+    log_h = s(3.2)
     lay = new_layer()
     d = Canvas(lay)
-    log_h = s(2.6)
-    y = y0
-    while y < y1:
-        for i in range(int(x1 - x0)):
-            f = i / (x1 - x0)
-            c = mix(mix(LOG, (176, 146, 104), 0.35), mix(LOG, (40, 30, 22), 0.4), f)
-            d.line([(x0 + i, y), (x0 + i, y + log_h)], fill=vary(c, rng, 3))
-        d.line([(x0, y + log_h - 1), (x1, y + log_h - 1)], fill=(40, 30, 22, 255), width=2)
-        d.soft("line", [(x0, y + 2), (x1, y + 2)], fill=(196, 166, 120, 90), width=1)
-        for cx in (x0 - 3, x1 + 3):  # log ends at the corners
-            d.ellipse([cx - log_h * 0.55, y, cx + log_h * 0.55, y + log_h], fill=(150, 116, 80, 255))
-            d.ellipse([cx - log_h * 0.25, y + log_h * 0.3, cx + log_h * 0.25, y + log_h * 0.7], fill=(120, 88, 58, 255))
+
+    # Side wall, in shadow, logs following its perspective slope.
+    y = top
+    while y < G:
+        for py in range(int(log_h)):
+            t = py / log_h
+            col = mix(mix(WEATHERED, (52, 46, 44), 0.55), (24, 22, 26), 0.25 * (1 - log_shade(t, 0.5)))
+            d.line([(X1, y + py), (XS, y + py - R)], fill=col + (255,), width=1)
+        d.line([(X1, y + log_h - 1), (XS, y + log_h - 1 - R)], fill=(28, 24, 22, 255), width=2)
         y += log_h
-    for _ in range(int((x1 - x0) * (y1 - y0) / 60)):
-        dab(d, rng.uniform(x0, x1), rng.uniform(y0, y1), rng.uniform(4, 12), rng.uniform(1, 2),
-            vary(mix(LOG, (150, 120, 84), rng.random() * 0.5), rng, 12, 110), rng.uniform(-0.05, 0.05))
-    if window:
-        wx0, wy0, wx1, wy1 = window
-        d.rectangle([wx0 - 3, wy0 - 3, wx1 + 3, wy1 + 3], fill=(150, 120, 80, 255))
-        d.rectangle([wx0, wy0, wx1, wy1], fill=(40, 34, 30, 255))
-        d.rectangle([wx0 + 2, wy0 + 2, (wx0 + wx1) / 2 - 1, wy1 - 2], fill=(110, 118, 120, 255))
+    if side_window:
+        wx0, wy0, wx1, wy1 = [s(v) for v in side_window]
+        k0, k1 = (wx0 - X1) / dw * R, (wx1 - X1) / dw * R
+        d.polygon([(wx0, wy0 - k0), (wx1, wy0 - k1), (wx1, wy1 - k1), (wx0, wy1 - k0)], fill=(96, 86, 72, 255))
+        m = s(0.8)
+        d.polygon([(wx0 + m, wy0 - k0 + m), (wx1 - m, wy0 - k1 + m), (wx1 - m, wy1 - k1 - m), (wx0 + m, wy1 - k0 - m)],
+                  fill=(70, 84, 92, 255))
+    # Shadow under the side eave.
+    d.soft("polygon", [(X1, top), (XS, top - R), (XS, top - R + s(5)), (X1, top + s(5))], fill=(10, 8, 6, 120))
+
+    # Gable wall in the sun: round logs, moss chinking between them.
+    y = top
+    while y < G:
+        for py in range(int(log_h)):
+            t = py / log_h
+            for seg in range(4):  # brighter at the sunlit (left) end
+                sx0 = X0 + (X1 - X0) * seg / 4
+                sx1 = X0 + (X1 - X0) * (seg + 1) / 4
+                b = log_shade(t, seg / 3)
+                col = tuple(clamp(c * b) for c in WEATHERED)
+                d.line([(sx0, y + py), (sx1, y + py)], fill=col + (255,), width=1)
+        d.line([(X0, y + log_h - 1), (X1, y + log_h - 1)], fill=(34, 28, 22, 255), width=2)
+        for _ in range(int((X1 - X0) / 18)):  # moss and tow stuffed in the seams
+            dab(d, rng.uniform(X0, X1), y + log_h - 1, rng.uniform(3, 8), 1.2, vary((104, 112, 60), rng, 14, 220), 0, 6)
+        for _ in range(int((X1 - X0) / 10)):  # grain and checks in the wood
+            gx = rng.uniform(X0, X1)
+            d.line([(gx, y + rng.uniform(1, log_h - 2)), (gx + rng.uniform(6, 26), y + rng.uniform(1, log_h - 2))],
+                   fill=vary((88, 76, 62), rng, 10, 150), width=1)
+        y += log_h
+    # Log ends at both corners, notched and sticking out.
+    y = top
+    while y < G:
+        for cx in (X0 - s(0.6), X1 + s(0.6)):
+            d.ellipse([cx - log_h * 0.6, y, cx + log_h * 0.6, y + log_h], fill=(176, 150, 112, 255))
+            d.ellipse([cx - log_h * 0.32, y + log_h * 0.25, cx + log_h * 0.32, y + log_h * 0.75], outline=(130, 104, 76, 255))
+            d.arc([cx - log_h * 0.6, y, cx + log_h * 0.6, y + log_h], 30, 150, fill=(90, 70, 52, 255), width=2)
+        y += log_h
+
+    for wx0, wy0, wx1, wy1 in windows:  # small windows of four panes reflecting the sky
+        wx0, wy0, wx1, wy1 = s(wx0), s(wy0), s(wx1), s(wy1)
+        f = s(1.1)
+        d.rectangle([wx0 - f, wy0 - f, wx1 + f, wy1 + f * 1.6], fill=(178, 160, 128, 255))
+        for py in range(int(wy0), int(wy1)):
+            t = (py - wy0) / max(1, wy1 - wy0)
+            d.line([(wx0, py), (wx1, py)], fill=mix((196, 210, 214), (70, 84, 92), t) + (255,))
+        d.line([((wx0 + wx1) / 2, wy0), ((wx0 + wx1) / 2, wy1)], fill=(150, 132, 104, 255), width=round(s(0.5)))
+        d.line([(wx0, (wy0 + wy1) / 2), (wx1, (wy0 + wy1) / 2)], fill=(150, 132, 104, 255), width=round(s(0.5)))
+        d.line([(wx0 - f, wy1 + f * 1.6), (wx1 + f, wy1 + f * 1.6)], fill=(60, 48, 36, 255), width=2)
+
     if door:
-        dx0, dy0, dx1, dy1 = door
-        d.rectangle([dx0 - 3, dy0 - 3, dx1 + 3, dy1], fill=(130, 100, 70, 255))
-        d.rectangle([dx0, dy0, dx1, dy1], fill=(56, 40, 28, 255))
-        for i in range(4):
-            xx = dx0 + (dx1 - dx0) * (i + 0.5) / 4
-            d.line([(xx, dy0), (xx, dy1)], fill=(40, 28, 20, 255), width=1)
-    # Board roof: weathered grey planks, lighter on the left slope.
-    peak = ((x0 + x1) / 2, y0 - roof_h)
-    left, right = (x0 - s(5), y0 + 2), (x1 + s(5), y0 + 2)
-    d.polygon([left, peak, right], fill=(98, 92, 82, 255))
-    for i in range(160):
-        f = rng.random()
-        side = rng.random() < 0.5
-        a, b = (left, peak) if side else (peak, right)
-        x = a[0] + (b[0] - a[0]) * f
-        ytop = a[1] + (b[1] - a[1]) * f
-        col = (150, 142, 124) if side else (72, 68, 62)
-        d.soft("line", [(x, ytop + 2), (x + rng.uniform(-2, 2), y0 + 1)], fill=vary(col, rng, 14, 150), width=2)
-    d.line([left, peak, right], fill=(60, 54, 46, 255), width=3)
+        dx0, dy0, dx1, dy1 = [s(v) for v in door]
+        f = s(1.2)
+        d.rectangle([dx0 - f, dy0 - f, dx1 + f, dy1], fill=(160, 140, 108, 255))
+        for i in range(int(dx1 - dx0)):
+            t = i / (dx1 - dx0)
+            d.line([(dx0 + i, dy0), (dx0 + i, dy1)], fill=mix((92, 70, 48), (50, 38, 28), t) + (255,))
+        for k in range(1, 4):
+            xx = dx0 + (dx1 - dx0) * k / 4
+            d.line([(xx, dy0), (xx, dy1)], fill=(36, 26, 18, 255), width=2)
+        for yy in (dy0 + (dy1 - dy0) * 0.25, dy0 + (dy1 - dy0) * 0.75):
+            d.line([(dx0, yy), (dx1, yy)], fill=(70, 54, 38, 255), width=round(s(0.7)))
+        d.ellipse([dx1 - s(2), (dy0 + dy1) / 2 - s(0.5), dx1 - s(1), (dy0 + dy1) / 2 + s(0.5)], fill=(40, 36, 34, 255))
+        d.ellipse([dx0 - s(3), dy1 - s(1.2), dx1 + s(3), dy1 + s(2)], fill=(132, 128, 116, 255))  # doorstep stone
+
+    if sooty:  # a smoke sauna's walls blacken near the top
+        for i in range(int(s(14))):
+            t = i / s(14)
+            d.soft("line", [(X0, top + i), (X1, top + i)], fill=(20, 16, 14, int(170 * (1 - t) ** 1.5)), width=1)
+        vx = (X0 + X1) / 2 + s(6)
+        d.rectangle([vx, top + s(3), vx + s(6), top + s(6)], fill=(14, 10, 8, 255))  # smoke vent
+        for _ in range(30):
+            dab(d, vx + s(3) + rng.gauss(0, s(3)), top + s(2) - abs(rng.gauss(0, s(3))), rng.uniform(3, 7), rng.uniform(2, 4),
+                (20, 16, 14, 90), 0, 6)
+
+    # Gable triangle: vertical weatherboards, shaded under the eaves.
+    gl, gr = (X0 - ov * 0.2, top), (X1 + ov * 0.2, top)
+    d.polygon([gl, peak, gr], fill=mix(WEATHERED, (60, 52, 44), 0.25) + (255,))
+    half = (gr[0] - gl[0]) / 2
+    for bx in range(int(gl[0]), int(gr[0]), int(s(1.6))):
+        h = s(roof_h) * max(0.0, 1 - abs(bx - peak[0]) / half)
+        d.line([(bx, top), (bx, top - h)], fill=vary((70, 60, 50), rng, 8, 255), width=1)
+    d.polygon([(gl[0], top + s(0.3)), (gr[0], top + s(0.3)), (gr[0], top - s(0.6)), (gl[0], top - s(0.6))], fill=(60, 50, 40, 255))
+
+    # The roof's far slope, receding with the side wall; weathered boards, poles, moss.
+    eave_r = (X1 + ov, top + s(1))
+    plane = [peak, (peak[0] + dw, peak[1] - R), (eave_r[0] + dw, eave_r[1] - R), eave_r]
+    d.polygon(plane, fill=(106, 100, 90, 255))
+    for i in range(70):
+        f = i / 70
+        a = (peak[0] + dw * f, peak[1] - R * f)
+        b = (eave_r[0] + dw * f, eave_r[1] - R * f)
+        d.line([a, b], fill=vary((128, 120, 106) if i % 2 else (88, 82, 74), rng, 8), width=2)
+    for f in (0.3, 0.68):  # weight poles laid along the roof
+        a = (peak[0] + (eave_r[0] - peak[0]) * f, peak[1] + (eave_r[1] - peak[1]) * f)
+        d.line([a, (a[0] + dw, a[1] - R)], fill=(64, 56, 46, 255), width=round(s(0.9)))
+        d.line([(a[0], a[1] - s(0.4)), (a[0] + dw, a[1] - R - s(0.4))], fill=(150, 136, 112, 255), width=1)
+    for _ in range(int(dw * 0.6)):
+        f, g = rng.random(), rng.random() ** 0.6
+        x = peak[0] + (eave_r[0] - peak[0]) * g + dw * f
+        y = peak[1] + (eave_r[1] - peak[1]) * g - R * f
+        dab(d, x, y, rng.uniform(3, 9), rng.uniform(1.5, 3), vary((98, 110, 54), rng, 14, 210), 0.5, 6)
+    d.line([plane[2], plane[3]], fill=(30, 26, 22, 255), width=round(s(0.8)))  # eave edge
+    if chimney:  # fieldstone chimney rising through the ridge
+        f = 0.55
+        cx, cy = peak[0] + dw * f, peak[1] - R * f
+        cw, ch = s(6), s(11)
+        d.polygon([(cx - cw / 2, cy + s(3)), (cx - cw / 2, cy - ch), (cx + cw / 2, cy - ch), (cx + cw / 2, cy + s(4))],
+                  fill=(112, 106, 96, 255))
+        for _ in range(26):
+            sx = rng.uniform(cx - cw / 2, cx + cw / 2)
+            sy = rng.uniform(cy - ch, cy + s(3))
+            lit_ = (cx - sx) / cw + 0.5
+            dab(d, sx, sy, rng.uniform(3, 6), rng.uniform(2, 4), vary(mix((84, 80, 74), (190, 182, 166), lit_), rng, 12), 0, 7)
+        d.rectangle([cx - cw / 2 - s(1), cy - ch - s(1.4), cx + cw / 2 + s(1), cy - ch], fill=(80, 74, 66, 255))
+
+    # Front edges of the roof: bargeboards, lit on the left slope, with shadow beneath.
+    for a, b, col in (((X0 - ov, top + s(1)), peak, (176, 160, 134)), (peak, eave_r, (98, 88, 76))):
+        d.soft("polygon", [a, b, (b[0], b[1] + s(3.5)), (a[0], a[1] + s(3.5))], fill=(14, 10, 8, 110))
+        d.line([a, b], fill=col + (255,), width=round(s(1.3)))
+    # Damp ground line along the foot of the walls.
+    d.soft("polygon", [(X0 - s(2), G - s(1.5)), (X1, G - s(1.5)), (XS, G - R - s(1.5)), (XS, G - R + s(1)), (X1, G + s(1.5)),
+                       (X0 - s(2), G + s(1.5))], fill=(30, 26, 18, 140))
     d.flush()
     paint(img, lay, 0.6)
 
 
-def finish(img, rng, warmth=0.06):
-    """Unify like a varnished canvas: warm glaze, soft focus, faint texture, vignette."""
-    glaze = Image.new("RGBA", (W, H), SUN + (int(255 * warmth),))
-    img.alpha_composite(glaze)
-    img = img.filter(ImageFilter.GaussianBlur(0.6))
-    noise = Image.effect_noise((W, H), 18).convert("L")
-    texture = Image.merge("RGBA", [noise, noise, noise, Image.new("L", (W, H), 14)])
+def woodpile(img, rng, x0, y0, x1, y1):
+    """Split birch logs stacked end-out under a little roof of boards."""
+    lay = new_layer()
+    d = ImageDraw.Draw(lay)
+    X0, Y0, X1, Y1 = s(x0), s(y0), s(x1), s(y1)
+    r = s(1.3)
+    y = Y1 - r
+    while y > Y0 + r:
+        x = X0 + r + rng.uniform(0, r)
+        while x < X1 - r:
+            rr = r * rng.uniform(0.8, 1.1)
+            d.ellipse([x - rr, y - rr, x + rr, y + rr], fill=(226, 220, 204, 255))  # birch bark rim
+            d.ellipse([x - rr * 0.8, y - rr * 0.8, x + rr * 0.8, y + rr * 0.8], fill=vary((206, 172, 120), rng, 14))
+            d.arc([x - rr, y - rr, x + rr, y + rr], 20, 160, fill=(80, 64, 48, 255), width=2)
+            x += rr * 2.05
+        y -= r * 1.85
+    d.polygon([(X0 - s(1), Y0 + s(1)), (X1 + s(1), Y0 - s(1)), (X1 + s(1), Y0 + s(1)), (X0 - s(1), Y0 + s(3))], fill=(96, 88, 76, 255))
+    paint(img, lay, 0.5)
+
+def leafy_tree(img, rng, cx, base, height, width, fade=0.0, trunk=(70, 56, 44), white_trunk=False):
+    """A birch or alder: a slender trunk and rounded leaf masses, each lit from the upper
+    left (light, mid and shadow greens), the way Holmberg built up foliage."""
+    lay = new_layer()
+    d = ImageDraw.Draw(lay)
+    trunk_col = mix((226, 220, 204) if white_trunk else trunk, SKY_HAZE, fade)
+    tw = max(2.0, width * 0.05)
+    d.polygon([(cx - tw, base), (cx - tw * 0.5, base - height * 0.75), (cx + tw * 0.5, base - height * 0.75), (cx + tw, base)],
+              fill=trunk_col + (255,))
+    if white_trunk:
+        for _ in range(int(height / 10)):
+            y = rng.uniform(base - height * 0.7, base)
+            d.line([(cx - tw * 0.8, y), (cx + tw * 0.4, y)], fill=mix((40, 36, 32), SKY_HAZE, fade) + (255,), width=2)
+    shadow_c = mix((34, 52, 30), SKY_HAZE, fade)
+    mid_c = mix((78, 100, 44), SKY_HAZE, fade)
+    lit_c = mix((176, 176, 84), SKY_HAZE, fade * 0.8)
+    crown_y = base - height * 0.62
+    masses = []
+    for _ in range(int(9 + width / s(3))):
+        mx = cx + rng.gauss(0, width * 0.2)
+        my = crown_y + rng.gauss(0, height * 0.1)
+        masses.append((mx, my, rng.uniform(width * 0.16, width * 0.28)))
+    masses.sort(key=lambda m: m[1])
+    for mx, my, r in masses:
+        for _ in range(int(r * 1.6)):  # shadow body, drooping
+            a = rng.uniform(0, 6.28)
+            rr = r * math.sqrt(rng.random())
+            dab(d, mx + math.cos(a) * rr, my + abs(math.sin(a)) * rr * 0.9, rng.uniform(2.5, 5), rng.uniform(2, 3.5),
+                vary(shadow_c, rng, 6), rng.uniform(0, 3), 6)
+        for _ in range(int(r * 1.1)):  # mid tones toward the light
+            a = rng.uniform(math.pi * 0.9, math.pi * 1.9)
+            rr = r * math.sqrt(rng.random()) * 0.9
+            dab(d, mx + math.cos(a) * rr, my + math.sin(a) * rr * 0.8, rng.uniform(2.5, 5), rng.uniform(1.5, 3),
+                vary(mid_c, rng, 8), rng.uniform(0, 3), 6)
+        for _ in range(int(r * 0.7)):  # sunlit rim, upper left
+            a = rng.uniform(math.pi * 1.0, math.pi * 1.5)
+            rr = r * rng.uniform(0.55, 1.0)
+            dab(d, mx + math.cos(a) * rr, my + math.sin(a) * rr * 0.8, rng.uniform(2, 4), rng.uniform(1.2, 2.4),
+                vary(lit_c, rng, 12), rng.uniform(0, 3), 6)
+    paint(img, lay, 0.5)
+
+
+def meadow(img, rng, top, bottom, sunlit=0.5):
+    """Patchy summer grass: broad swathes of olive, yellow-green and ochre, then blades."""
+    lay = new_layer()
+    d = ImageDraw.Draw(lay)
+    d.rectangle([0, top, W, bottom], fill=GRASS[0] + (255,))
+    for _ in range(140):
+        x, y = rng.uniform(0, W), rng.uniform(top, bottom)
+        col = rng.choice([(118, 128, 56), (150, 150, 66), (86, 104, 46), (168, 154, 82), (70, 88, 44)])
+        col = mix(col, SUN, sunlit * rng.random() * 0.5)
+        dab(d, x, y, rng.uniform(s(4), s(14)), rng.uniform(s(1), s(3)), col + (255,), rng.uniform(-0.1, 0.1), 10)
+    for _ in range(int(W * (bottom - top) / 120)):
+        x, y = rng.uniform(0, W), rng.uniform(top, bottom)
+        depth = (y - top) / max(1, bottom - top)
+        col = mix(rng.choice(GRASS), SUN, sunlit * 0.4 * rng.random())
+        d.line([(x, y), (x + rng.uniform(-2, 2), y - s(0.6) - depth * s(1.8))], fill=col + (255,), width=1 + int(depth * 2))
+    for _ in range(int(W / 6)):  # a few flowers catching the light
+        x, y = rng.uniform(0, W), rng.uniform(top, bottom)
+        d.ellipse([x - 1.5, y - 1.5, x + 1.5, y + 1.5], fill=rng.choice([(240, 232, 200), (226, 196, 90), (200, 120, 160)]) + (255,))
+    paint(img, lay, 0.5)
+
+
+def pole_fence(img, rng, x0, x1, y_back, y_front, fade=0.0):
+    """Riukuaita: the old Finnish fence of slanted grey poles between upright pairs."""
+    lay = new_layer()
+    d = ImageDraw.Draw(lay)
+    post = mix((92, 84, 72), SKY_HAZE, fade)
+    pole = mix((150, 140, 120), SKY_HAZE, fade)
+    pole_dark = mix((96, 88, 76), SKY_HAZE, fade)
+    height = s(9)
+    x = x0
+    while x < x1:
+        y = y_back + (y_front - y_back) * (x - x0) / max(1, x1 - x0)
+        for dx in (-s(0.4), s(0.4)):
+            d.line([(x + dx, y), (x + dx, y - height)], fill=post + (255,), width=round(s(0.45)))
+        x += s(5)
+    x = x0 - s(4)
+    while x < x1 + s(2):
+        y = y_back + (y_front - y_back) * (x - x0) / max(1, x1 - x0)
+        d.line([(x, y - s(0.5)), (x + s(9), y - height * 0.95)], fill=pole_dark + (255,), width=round(s(0.55)))
+        d.line([(x, y - s(0.8)), (x + s(9), y - height * 0.95 - s(0.3))], fill=pole + (255,), width=round(s(0.3)))
+        x += s(1.5)
+    paint(img, lay, 0.6)
+
+
+def ferns(img, rng, cx, cy, size, count=1):
+    lay = new_layer()
+    d = ImageDraw.Draw(lay)
+    for _ in range(count):
+        x0 = cx + rng.uniform(-size, size)
+        for _ in range(9):
+            a = rng.uniform(math.pi * 1.05, math.pi * 1.95)
+            ln = size * rng.uniform(0.5, 1.0)
+            pts = [(x0 + math.cos(a) * ln * t + math.sin(t * 3) * 2, cy + math.sin(a) * ln * t * 0.6 + (ln * t * 0.4) ** 1.2 * 0.08)
+                   for t in (0, 0.25, 0.5, 0.75, 1.0)]
+            col = vary(mix((60, 92, 40), (150, 160, 70), 0.5 - math.cos(a) * 0.5), rng, 10)
+            d.line(pts, fill=col, width=2)
+            for (px, py) in pts[1:]:
+                dab(d, px, py, rng.uniform(2, 4), 1.2, col, a, 5)
+    paint(img, lay, 0.5)
+
+
+def oil_paint(img, rng, passes=((3.0, 0), (1.6, 10), (0.85, 18), (0.45, 30))):
+    """Repaint the finished scene as an oil painting: rounds of brushstrokes, coarse to
+    fine. Each stroke takes its colour from the scene and runs along the edges of forms;
+    finer rounds only touch places where the painting still differs from the scene, so
+    flat sky stays broad and soft while trees and buildings keep their detail."""
+    src = img.convert("RGB")
+    gray = src.convert("L").filter(ImageFilter.GaussianBlur(s(0.8)))
+    gx = gray.filter(ImageFilter.Kernel((3, 3), [-1, 0, 1, -2, 0, 2, -1, 0, 1], 8, 128)).load()
+    gy = gray.filter(ImageFilter.Kernel((3, 3), [-1, -2, -1, 0, 0, 0, 1, 2, 1], 8, 128)).load()
+    canvas = src.filter(ImageFilter.GaussianBlur(s(passes[0][0])))
+    for size, threshold in passes:
+        r = s(size)
+        ref = src.filter(ImageFilter.GaussianBlur(r * 0.5)).load()
+        cur = canvas.load()
+        d = ImageDraw.Draw(canvas, "RGBA")
+        step = max(1, int(r))
+        cells = [(x + rng.uniform(-r / 2, r / 2), y + rng.uniform(-r / 2, r / 2))
+                 for y in range(0, H, step) for x in range(0, W, step)]
+        rng.shuffle(cells)
+        for x, y in cells:
+            xi, yi = min(W - 1, max(0, int(x))), min(H - 1, max(0, int(y)))
+            c = ref[xi, yi]
+            if threshold:
+                k = cur[xi, yi]
+                if abs(c[0] - k[0]) + abs(c[1] - k[1]) + abs(c[2] - k[2]) < threshold:
+                    continue
+            dx, dy = gx[xi, yi] - 128, gy[xi, yi] - 128
+            angle = math.atan2(dy, dx) + math.pi / 2 if dx * dx + dy * dy > 6 else rng.uniform(-0.25, 0.25)
+            col = tuple(clamp(v + rng.uniform(-6, 6)) for v in c) + (230,)
+            dab(d, x, y, r * rng.uniform(1.3, 2.3), r * rng.uniform(0.5, 0.75), col, angle, 8)
+    return canvas.convert("RGBA")
+
+
+def finish(img, rng, warmth=0.07):
+    """Unify like an old varnished canvas: oil brushwork, a warm glaze, the weave of the
+    canvas, and darkened corners."""
+    img = oil_paint(img, rng)
+    img.alpha_composite(Image.new("RGBA", (W, H), (255, 214, 140, int(255 * warmth))))
+    weave = Image.new("L", (8, 8))
+    for y in range(8):
+        for x in range(8):
+            weave.putpixel((x, y), 140 if (x % 4 < 2) ^ (y % 4 < 2) else 110)
+    weave = weave.resize((16, 16), Image.BILINEAR)
+    tile = Image.new("L", (W, H))
+    for y in range(0, H, 16):
+        for x in range(0, W, 16):
+            tile.paste(weave, (x, y))
+    texture = Image.merge("RGBA", [tile, tile, tile, Image.new("L", (W, H), 16)])
     img.alpha_composite(texture)
-    # Darken the edges and corners a little, like an old canvas.
     small = Image.new("L", (64, 29))
     for y in range(29):
         for x in range(64):
             dx, dy = (x - 31.5) / 32, (y - 14) / 14.5
-            small.putpixel((x, y), clamp(80 * max(0.0, dx * dx + dy * dy - 0.35)))
-    dark = Image.new("RGBA", (W, H), (24, 16, 8, 255))
+            small.putpixel((x, y), clamp(85 * max(0.0, dx * dx * 0.7 + dy * dy * 0.8 - 0.35)))
+    dark = Image.new("RGBA", (W, H), (30, 18, 8, 255))
     dark.putalpha(small.resize((W, H), Image.BILINEAR))
     img.alpha_composite(dark)
     return img.convert("RGB")
@@ -407,44 +770,40 @@ def finish(img, rng, warmth=0.06):
 
 
 def village():
+    """A lakeside farmyard on a summer afternoon."""
     rng = random.Random(1)
     img = Image.new("RGBA", (W, H))
-    sky(img, rng, horizon=0.62)
-    treeline(img, rng, s(84), s(34), DISTANT, 2.2, 90)
-    treeline(img, rng, s(92), s(30), (72, 92, 70), 1.2, 40, 80)
-    for _ in range(10):  # forest behind the houses, softened by distance
-        spruce(img, rng, rng.uniform(0, W), s(92), s(rng.uniform(36, 52)), s(rng.uniform(14, 20)), 0.7, 0.6, 1.4, fade=0.45)
-    for x in (s(110), s(128), s(150), s(170)):
-        spruce(img, rng, x + rng.uniform(-8, 8), s(96), s(rng.uniform(48, 60)), s(18), 0.8, 0.8, 0.9, fade=0.2)
-    ground(img, rng, s(90))
-    road(img, rng, [(0, s(110)), (W * 0.4, s(108)), (W, s(111)), (W, H), (0, H)], (190, 158, 108))
-    lay = new_layer()
-    d = ImageDraw.Draw(lay)
-    for y0 in (s(124), s(133)):  # cart ruts
-        pts = [(x, y0 + math.sin(x / s(30)) * s(1.2)) for x in range(0, W + 8, 8)]
-        d.line(pts, fill=(150, 120, 80, 150), width=round(s(1)))
-        d.line([(x, y + s(0.8)) for x, y in pts], fill=(218, 190, 140, 120), width=round(s(0.5)))
-    for _ in range(700):  # grass creeping in from the edges
-        x = rng.uniform(0, W)
-        y = s(110) + abs(rng.gauss(0, s(2.5))) if rng.random() < 0.97 else rng.uniform(s(112), H)
-        d.line([(x, y), (x + rng.uniform(-2, 2), y - rng.uniform(s(1), s(2.5)))], fill=vary(rng.choice(GRASS), rng, 10), width=2)
-    paint(img, lay, 0.6)
-    shadow(img, [(s(88), s(100)), (s(88), s(104)), (s(120), s(112)), (s(96), s(101))], 70)
-    shadow(img, [(s(300), s(104)), (s(300), s(106)), (s(320), s(112)), (s(320), s(105))], 70)
-    log_building(img, rng, s(18), s(54), s(88), s(100), s(14), door=(s(44), s(74), s(56), s(100)),
-                 window=(s(66), s(64), s(76), s(71)))
-    log_building(img, rng, s(184), s(50), s(300), s(104), s(22), door=(s(258), s(72), s(274), s(104)),
-                 window=(s(198), s(64), s(214), s(76)))
+    sky(img, rng, horizon=0.58, clouds=5, cloud_bottom=0.42)
+    hills(img, rng, s(80), s(16), (110, 128, 150), 0.35)
+    lake(img, rng, s(78), s(88))
+    treeline(img, rng, s(80), s(12), (76, 96, 92), 1.6, 120, x0=0, x1=s(90))  # far shore
+    treeline(img, rng, s(92), s(30), (52, 72, 52), 1.0, 40, x0=-s(4), x1=s(98))
+    treeline(img, rng, s(92), s(30), (52, 72, 52), 1.0, 40, x0=s(178), x1=W + s(4))
+    leafy_tree(img, rng, s(8), s(100), s(70), s(34), white_trunk=True)
+    leafy_tree(img, rng, s(310), s(98), s(56), s(30), fade=0.1)
+    meadow(img, rng, s(88), s(118), 0.7)
+    spruce(img, rng, s(104), s(98), s(52), s(17), 0.9, 0.9, 0.6, fade=0.08)
+    spruce(img, rng, s(176), s(98), s(46), s(15), 0.9, 0.9, 0.6, fade=0.08)
+    pole_fence(img, rng, s(96), s(182), s(100), s(102))
+    road(img, rng, [(0, s(110)), (W * 0.4, s(108)), (W, s(111)), (W, H), (0, H)], (192, 160, 108))
+    road_details(img, rng, s(109))
+    shadow(img, [(s(88), s(100)), (s(88), s(104)), (s(124), s(114)), (s(100), s(101))], 80)
+    shadow(img, [(s(300), s(104)), (s(300), s(106)), (s(320), s(114)), (s(320), s(105))], 80)
+    woodpile(img, rng, 1, 84, 15, 100)
+    farm_building(img, rng, 16, 66, 88, 100, 38, 14, 3, door=(33, 77, 45, 100), sooty=True)
+    farm_building(img, rng, 184, 262, 300, 104, 50, 24, 5, door=(236, 76, 250, 104), windows=[(196, 66, 210, 77)],
+                  side_window=(276, 68, 287, 78), chimney=True)
+    shadow(img, [(s(230), s(115)), (s(246), s(115)), (s(266), s(119)), (s(240), s(119))], 110, 4)  # Kyllikki's
     # Cold hearth: a ring of stones round grey ash and charred logs.
     lay = new_layer()
-    d = ImageDraw.Draw(lay, "RGBA")
+    d = Canvas(lay)
     d.ellipse([s(132), s(103), s(172), s(119)], fill=(84, 80, 76, 255))
     for _ in range(80):
         dab(d, rng.uniform(s(138), s(166)), rng.uniform(s(106), s(116)), rng.uniform(3, 8), rng.uniform(2, 4),
             vary((138, 134, 128), rng, 20, 160), rng.uniform(0, 3))
     d.line([(s(142), s(109)), (s(161), s(113))], fill=(30, 24, 20, 255), width=round(s(2)))
     d.line([(s(144), s(114)), (s(162), s(107))], fill=(40, 30, 24, 255), width=round(s(2)))
-    paint(img, lay, 0.6)
+    paint(img, d, 0.6)
     for a in range(12):
         ang = 2 * math.pi * a / 12
         x = s(152) + math.cos(ang) * s(21)
@@ -452,89 +811,108 @@ def village():
         rock(img, rng, x - s(4), y - s(3), x + s(4), y + s(3), 0.1)
     # Stump for the bread.
     lay = new_layer()
-    d = ImageDraw.Draw(lay, "RGBA")
+    d = ImageDraw.Draw(lay)
     for i in range(s(24)):
         f = i / s(24)
-        d.line([(s(46) + i, s(104)), (s(46) + i, s(120))], fill=mix((140, 104, 70), (52, 38, 26), f) + (255,))
+        d.line([(s(46) + i, s(104)), (s(46) + i, s(120))], fill=mix((150, 112, 74), (52, 38, 26), f) + (255,))
     for _ in range(40):
         x = rng.uniform(s(46), s(70))
-        d.line([(x, s(105)), (x + rng.uniform(-2, 2), s(120))], fill=(44, 32, 22, 150), width=2)
-    d.ellipse([s(46), s(101), s(70), s(108)], fill=(196, 160, 112, 255))
+        d.line([(x, s(105)), (x + rng.uniform(-2, 2), s(120))], fill=(44, 32, 22, 255), width=2)
+    d.ellipse([s(46), s(101), s(70), s(108)], fill=(200, 164, 114, 255))
     for r in range(1, 6):
-        d.ellipse([s(58) - r * s(2), s(104.5) - r * s(0.6), s(58) + r * s(2), s(104.5) + r * s(0.6)], outline=(150, 116, 78, 200))
+        d.ellipse([s(58) - r * s(2), s(104.5) - r * s(0.6), s(58) + r * s(2), s(104.5) + r * s(0.6)], outline=(150, 116, 78, 255))
     paint(img, lay, 0.6)
-    shadow(img, [(s(66), s(117)), (s(70), s(120)), (s(86), s(121)), (s(82), s(117))], 80, 4)
+    shadow(img, [(s(66), s(117)), (s(70), s(120)), (s(86), s(121)), (s(82), s(117))], 90, 4)
     for x in (s(30), s(110), s(290)):
         rock(img, rng, x, s(122), x + s(rng.uniform(10, 16)), s(130), 0.6)
-    light_shafts(img, rng, [(s(30), s(14)), (s(120), s(8))], 26)
-    dapple(img, rng, s(112), 30, 40)
+    light_shafts(img, rng, [(s(30), s(14)), (s(120), s(8))], 22)
     save(finish(img, rng), "rooms/village.png")
 
 
 def path():
+    """After Holmberg's Summer Day in Häme: a sandy road winding out of the dark
+    spruces toward a sunlit valley and far blue hills."""
     rng = random.Random(2)
     img = Image.new("RGBA", (W, H))
-    sky(img, rng, top=(126, 156, 176), horizon=0.5, clouds=4)
-    treeline(img, rng, s(100), s(70), DISTANT, 2.5, 110, 90)
-    for _ in range(14):
-        spruce(img, rng, rng.uniform(0, W), s(104), s(rng.uniform(70, 96)), s(rng.uniform(20, 28)), 0.7, 0.6, 1.4, fade=0.4)
-    ground(img, rng, s(102))
-    # Holmberg's road, winding off into the woods.
-    road(img, rng, [(0, s(116)), (s(120), s(113)), (s(200), s(106)), (s(226), s(103)), (s(240), s(104)),
-                    (s(222), s(110)), (W, s(114)), (W, H), (0, H)])
-    for _ in range(8):
-        x = rng.choice([rng.uniform(0, s(110)), rng.uniform(s(200), W)])
-        spruce(img, rng, x, s(rng.uniform(112, 118)), s(rng.uniform(80, 120)), s(rng.uniform(26, 36)), 1.0, 1.0, 0.7)
+    sky(img, rng, top=(104, 142, 182), horizon=0.6, clouds=6, cloud_bottom=0.5)
+    hills(img, rng, s(94), s(18), (104, 124, 150), 0.3, s(150), W)
+    treeline(img, rng, s(98), s(14), (70, 92, 84), 1.4, 110, x0=s(150), x1=W)
+    meadow(img, rng, s(94), s(122), 0.9)
+    # The road: across the foreground, with a branch winding off into the valley.
+    road(img, rng, [(0, s(116)), (s(150), s(113)), (s(206), s(108)), (s(226), s(100)), (s(246), s(95)),
+                    (s(252), s(95)), (s(240), s(101)), (s(232), s(108)), (s(250), s(113)), (W, s(114)), (W, H), (0, H)])
+    road_details(img, rng, s(114), (s(126), s(136)))
+    for _ in range(4):
+        leafy_tree(img, rng, s(rng.uniform(200, 290)), s(rng.uniform(96, 100)), s(rng.uniform(20, 30)),
+                   s(rng.uniform(14, 20)), fade=0.35)
+    # Dark woods framing the left and right.
+    for _ in range(9):
+        spruce(img, rng, s(rng.uniform(-10, 140)), s(rng.uniform(106, 112)), s(rng.uniform(90, 130)),
+               s(rng.uniform(26, 36)), 0.9, 0.9, 0.9, fade=rng.uniform(0.05, 0.25))
+    for _ in range(4):
+        spruce(img, rng, s(rng.uniform(280, 330)), s(rng.uniform(108, 114)), s(rng.uniform(100, 140)),
+               s(rng.uniform(28, 38)), 0.9, 0.9, 0.8, fade=0.1)
+    leafy_tree(img, rng, s(112), s(114), s(96), s(40), white_trunk=True)
+    leafy_tree(img, rng, s(210), s(110), s(70), s(30), white_trunk=True, fade=0.05)
     for x in (s(30), s(105), s(160), s(214), s(300)):
-        shadow(img, [(x - s(3), s(114)), (x + s(3), s(114)), (x + s(40), s(140)), (x + s(24), s(140))], 60, 10)
+        shadow(img, [(x - s(3), s(114)), (x + s(3), s(114)), (x + s(40), s(140)), (x + s(24), s(140))], 70, 10)
     # The old spruce the magpie sits in, with a bare branch reaching right.
     spruce(img, rng, s(160), s(114), s(118), s(66), 1.25, 1.1, 0.5, 0.1)
     lay = new_layer()
-    d = ImageDraw.Draw(lay, "RGBA")
+    d = ImageDraw.Draw(lay)
     d.line([(s(160), s(57)), (s(176), s(53)), (s(192), s(52))], fill=BARK + (255,), width=round(s(1.6)))
     paint(img, lay, 0.4)
     # Anthill: a heap of needles.
     lay = new_layer()
-    d = ImageDraw.Draw(lay, "RGBA")
+    d = ImageDraw.Draw(lay)
     d.polygon([(s(228), s(122)), (s(240), s(104)), (s(250), s(99)), (s(260), s(104)), (s(272), s(122))], fill=(110, 82, 52, 255))
     for _ in range(900):
         x, y = rng.uniform(s(230), s(270)), rng.uniform(s(100), s(122))
         if abs(x - s(250)) < (y - s(99)) * 1.1:
-            col = mix((150, 112, 70), (70, 50, 34), (x - s(230)) / s(40))
-            d.line([(x, y), (x + rng.uniform(-3, 3), y + rng.uniform(-2, 2))], fill=vary(col, rng, 16, 230), width=1)
+            col = mix((156, 116, 72), (70, 50, 34), (x - s(230)) / s(40))
+            d.line([(x, y), (x + rng.uniform(-3, 3), y + rng.uniform(-2, 2))], fill=vary(col, rng, 16), width=1)
     paint(img, lay, 0.4)
+    shadow(img, [(s(262), s(118)), (s(272), s(122)), (s(300), s(126)), (s(286), s(119))], 90, 5)
     rock(img, rng, s(40), s(118), s(64), s(128), 0.8)
-    light_shafts(img, rng, [(s(50), s(10)), (s(95), s(16)), (s(200), s(6))], 30)
-    dapple(img, rng, s(110), 50, 55)
-    save(finish(img, rng, 0.07), "rooms/path.png")
+    light_shafts(img, rng, [(s(50), s(10)), (s(95), s(16))], 26)
+    dapple(img, rng, s(112), 40, 50)
+    save(finish(img, rng, 0.08), "rooms/path.png")
 
 
 def grove():
+    """A forest interior: dark spruce walls, a glade of green-gold light, an old birch
+    and pine, mossy boulders and ferns."""
     rng = random.Random(3)
     img = Image.new("RGBA", (W, H))
-    sky(img, rng, top=(96, 128, 128), haze=(214, 222, 186), horizon=0.6, clouds=2)
-    treeline(img, rng, s(104), s(80), (98, 122, 112), 3.0, 120, 90)
-    for _ in range(16):
-        spruce(img, rng, rng.uniform(0, W), s(106), s(rng.uniform(80, 110)), s(rng.uniform(20, 30)), 0.7, 0.5, 1.6, fade=0.45)
-    ground(img, rng, s(104), [(66, 90, 46), (88, 112, 56), (52, 74, 40), (120, 140, 70)], 11000)
+    sky(img, rng, top=(120, 150, 150), haze=(226, 228, 190), horizon=0.6, clouds=2)
+    treeline(img, rng, s(104), s(80), (98, 122, 112), 2.4, 140, 90)
+    for _ in range(12):
+        spruce(img, rng, rng.uniform(0, W), s(106), s(rng.uniform(80, 110)), s(rng.uniform(20, 30)), 0.7, 0.5, 1.4,
+               fade=0.45)
+    for _ in range(3):
+        leafy_tree(img, rng, s(rng.uniform(60, 180)), s(106), s(rng.uniform(50, 70)), s(rng.uniform(26, 34)), fade=0.35,
+                   white_trunk=True)
+    meadow(img, rng, s(104), H, 0.6)
     pine_trunk(img, rng, s(252), s(262), -10, s(114))
-    for x in (s(20), s(300)):
-        spruce(img, rng, x, s(118), s(130), s(44), 1.1, 0.9, 0.6)
+    for x in (s(18), s(302)):
+        spruce(img, rng, x, s(120), s(140), s(48), 1.1, 0.9, 0.5)
+    shadow(img, [(s(194), s(114)), (s(224), s(114)), (s(276), s(144)), (s(236), s(144))], 80, 10)
+    shadow(img, [(s(252), s(114)), (s(262), s(114)), (s(300), s(144)), (s(284), s(144))], 70, 8)
     birch(img, rng, s(194), s(224), -10, s(114), crown=False)
     leaves(img, rng, s(170), s(8), s(110), s(30), 900)
-    shadow(img, [(s(194), s(114)), (s(224), s(114)), (s(276), s(144)), (s(236), s(144))], 70, 10)
-    shadow(img, [(s(252), s(114)), (s(262), s(114)), (s(300), s(144)), (s(284), s(144))], 60, 8)
     # Offering stone with its worn cup hollow.
     rock(img, rng, s(98), s(98), s(142), s(122), 0.5)
     lay = new_layer()
-    d = ImageDraw.Draw(lay, "RGBA")
+    d = ImageDraw.Draw(lay)
     d.ellipse([s(113), s(102), s(125), s(107)], fill=(56, 54, 48, 255))
     d.arc([s(113), s(102), s(125), s(107)], 200, 340, fill=(190, 184, 166, 255), width=2)
     paint(img, lay, 0.5)
     for x, w in ((s(26), 18), (s(60), 14), (s(278), 20)):
         rock(img, rng, x, s(116), x + s(w), s(128), 1.2)
-    light_shafts(img, rng, [(s(70), s(20)), (s(150), s(10))], 40)
-    dapple(img, rng, s(108), 40, 50)
+    for cx, cy in ((s(80), s(118)), (s(160), s(126)), (s(236), s(122)), (s(40), s(134))):
+        ferns(img, rng, cx, cy, s(9), 2)
+    light_shafts(img, rng, [(s(70), s(20)), (s(150), s(10))], 44)
+    dapple(img, rng, s(108), 40, 55)
     save(finish(img, rng, 0.05), "rooms/grove.png")
 
 
@@ -595,62 +973,179 @@ def soften(img, blur=0.8):
     return rim
 
 
+SUPERSAMPLE = 2
+
+
+def oil_paint_sprite(img, rng, passes=((0.9, 0), (0.5, 10), (0.28, 18), (0.14, 30))):
+    """The oil-paint pass for a figure on a transparent background. Colours are sampled
+    with alpha-weighted blur so edges don't pick up dark fringes, strokes only start
+    inside the figure, and the original silhouette is kept."""
+    w, h = img.size
+    scale = SCALE * SUPERSAMPLE
+    alpha = img.getchannel("A")
+    ap = alpha.load()
+
+    def sampled(radius):
+        return img.convert("RGBa").filter(ImageFilter.GaussianBlur(radius)).convert("RGBA").convert("RGB")
+
+    gray = img.convert("L").filter(ImageFilter.GaussianBlur(scale * 0.25))
+    gx = gray.filter(ImageFilter.Kernel((3, 3), [-1, 0, 1, -2, 0, 2, -1, 0, 1], 8, 128)).load()
+    gy = gray.filter(ImageFilter.Kernel((3, 3), [-1, -2, -1, 0, 0, 0, 1, 2, 1], 8, 128)).load()
+    canvas = sampled(passes[0][0] * scale)
+    for size, threshold in passes:
+        r = size * scale
+        ref = sampled(r * 0.5).load()
+        cur = canvas.load()
+        d = ImageDraw.Draw(canvas, "RGBA")
+        step = max(1, int(r))
+        cells = [(x + rng.uniform(-r / 2, r / 2), y + rng.uniform(-r / 2, r / 2))
+                 for y in range(0, h, step) for x in range(0, w, step)]
+        rng.shuffle(cells)
+        for x, y in cells:
+            xi, yi = min(w - 1, max(0, int(x))), min(h - 1, max(0, int(y)))
+            if ap[xi, yi] < 128:
+                continue
+            c = ref[xi, yi]
+            if threshold:
+                k = cur[xi, yi]
+                if abs(c[0] - k[0]) + abs(c[1] - k[1]) + abs(c[2] - k[2]) < threshold:
+                    continue
+            dx, dy = gx[xi, yi] - 128, gy[xi, yi] - 128
+            angle = math.atan2(dy, dx) + math.pi / 2 if dx * dx + dy * dy > 6 else math.pi / 2 + rng.uniform(-0.3, 0.3)
+            col = tuple(clamp(v + rng.uniform(-5, 5)) for v in c) + (235,)
+            dab(d, x, y, r * rng.uniform(1.2, 2.0), r * rng.uniform(0.45, 0.7), col, angle, 8)
+    out = canvas.convert("RGBA")
+    out.putalpha(alpha)
+    return out
+
+
+def painted_sprite(draw, path, seed, blur=0.4):
+    """Draw a figure at double resolution, oil-paint it, then scale it down to size."""
+    global SCALE
+    base = SCALE
+    SCALE = base * SUPERSAMPLE
+    try:
+        img = draw()
+    finally:
+        SCALE = base
+    img = oil_paint_sprite(img, random.Random(seed))
+    img = img.resize((img.width // SUPERSAMPLE, img.height // SUPERSAMPLE), Image.LANCZOS)
+    save(soften(img, blur), path)
+
+
+def curve(p0, p1, p2, n=10):
+    """Points along a quadratic curve from p0 to p2, bending toward p1 (room units)."""
+    return [((1 - t) ** 2 * p0[0] + 2 * (1 - t) * t * p1[0] + t * t * p2[0],
+             (1 - t) ** 2 * p0[1] + 2 * (1 - t) * t * p1[1] + t * t * p2[1]) for t in (i / n for i in range(n + 1))]
+
+
+def pts(points):
+    """Room units to sprite pixels."""
+    return [(s(x), s(y)) for x, y in points]
+
+
+def folds(d, rng, tops, bottoms, y0, y1, base):
+    """Cloth folds: a shadowed valley with a sunlit ridge to its left."""
+    for xt, xb in zip(tops, bottoms):
+        mid = ((xt + xb) / 2 + rng.uniform(-0.3, 0.3), (y0 + y1) / 2)
+        line = pts(curve((xt, y0), mid, (xb, y1), 8))
+        d.line(line, fill=mix(base, (20, 10, 10), 0.45) + (170,), width=round(s(0.5)))
+        d.line([(x - s(0.5), y) for x, y in line], fill=mix(base, (255, 236, 200), 0.3) + (120,), width=round(s(0.35)))
+
+
 def vilja():
     img, d = sprite(14, 40)
-    skin, hair = (236, 196, 160), (226, 192, 112)
-    d.ellipse([s(3.5), s(38.6), s(6.6), s(40)], fill=(60, 40, 28, 255))  # shoes
-    d.ellipse([s(7.6), s(38.6), s(10.7), s(40)], fill=(60, 40, 28, 255))
-    shaded_poly(img, [(s(3.6), s(17)), (s(10.4), s(17)), (s(12.6), s(39)), (s(1.4), s(39))], (168, 46, 36))  # skirt
-    for i in range(6):
-        x = s(3 + i * 1.6)
-        d.line([(x, s(20)), (x - s(0.6) + i * s(0.24), s(39))], fill=(120, 30, 26, 120), width=2)
-    shaded_poly(img, [(s(4.6), s(18)), (s(9.4), s(18)), (s(10), s(35)), (s(4), s(35))], (222, 212, 186), 0.25, 0.3)  # apron
-    shaded_poly(img, [(s(3.6), s(10.5)), (s(10.4), s(10.5)), (s(10.8), s(18.5)), (s(3.2), s(18.5))], (226, 218, 196))  # blouse
-    d.polygon([(s(4.6), s(12.5)), (s(9.4), s(12.5)), (s(9.6), s(18.5)), (s(4.4), s(18.5))], fill=(140, 36, 30, 255))  # bodice
-    for x0, x1 in ((s(1.6), s(3.6)), (s(10.4), s(12.4))):  # sleeves and hands
-        shaded_poly(img, [(x0, s(11)), (x1, s(11)), (x1, s(21)), (x0, s(21))], (226, 218, 196), 0.2, 0.3)
-        d.ellipse([x0, s(20.4), x1, s(22.6)], fill=skin + (255,))
-    d.rectangle([s(6), s(9), s(8), s(11)], fill=mix(skin, (150, 100, 80), 0.25) + (255,))  # neck
-    d.ellipse([s(3.8), s(2.4), s(10.2), s(10.2)], fill=skin + (255,))
-    d.ellipse([s(7.4), s(3), s(10.2), s(10)], fill=mix(skin, (150, 100, 80), 0.25) + (120,))
-    d.pieslice([s(3.4), s(1.6), s(10.6), s(8.4)], 180, 360, fill=hair + (255,))
-    d.ellipse([s(3.4), s(3.4), s(4.8), s(7.2)], fill=hair + (255,))
-    for i in range(7):  # braid over the right shoulder
-        y = s(7 + i * 2.1)
-        d.ellipse([s(9.2), y, s(11.4), y + s(2.4)], fill=mix(hair, (150, 110, 50), 0.15 + 0.1 * (i % 2)) + (255,))
-    d.ellipse([s(5.2), s(5.6), s(5.9), s(6.4)], fill=(50, 50, 70, 255))
-    d.ellipse([s(8.0), s(5.6), s(8.7), s(6.4)], fill=(50, 50, 70, 255))
-    d.ellipse([s(4.6), s(7), s(5.8), s(7.8)], fill=(226, 140, 120, 120))
-    d.line([(s(6.4), s(8.3)), (s(7.4), s(8.3))], fill=(170, 90, 80, 255), width=2)
-    save(soften(img), "chars/vilja.png")
+    rng = random.Random(21)
+    skin, hair = (238, 200, 168), (222, 184, 102)
+    red, linen = (168, 46, 36), (230, 220, 198)
+    for x in (4.8, 7.6):  # shoes peeking under the hem
+        d.ellipse([s(x), s(38.3), s(x + 2.2), s(40)], fill=(66, 46, 32, 255))
+    skirt = (curve((4.4, 17.2), (2.6, 27), (1.4, 38.6)) + curve((1.4, 38.6), (7, 40.2), (12.6, 38.6))
+             + curve((12.6, 38.6), (11.4, 27), (9.6, 17.2)))
+    shaded_poly(img, pts(skirt), red, 0.32, 0.45)
+    folds(d, rng, [5.4, 6.6, 7.8, 8.9], [3.0, 5.6, 8.6, 11.2], 18.5, 38.6, red)
+    d.line(pts(curve((1.4, 38.6), (7, 40.2), (12.6, 38.6))), fill=(110, 26, 22, 255), width=round(s(0.6)))  # hem band
+    apron = curve((5.3, 18), (4.6, 27), (5.0, 35.6)) + curve((5.0, 35.6), (7.2, 36.6), (9.4, 35.6)) + curve((9.4, 35.6), (9.6, 27), (8.9, 18))
+    shaded_poly(img, pts(apron), (220, 210, 186), 0.25, 0.35)
+    folds(d, rng, [6.4, 7.8], [5.8, 8.6], 19, 35.4, (220, 210, 186))
+    shaded_poly(img, pts([(3.6, 10.4), (5.4, 9.3), (8.6, 9.3), (10.4, 10.4), (9.9, 17.8), (4.1, 17.8)]), linen)  # blouse
+    shaded_poly(img, pts([(4.9, 11.4), (9.1, 11.4), (9.5, 17.8), (4.5, 17.8)]), (132, 34, 30), 0.25, 0.4)  # bodice
+    d.line(pts([(4.5, 12.6), (9.5, 12.6)]), fill=(196, 160, 90, 255), width=round(s(0.25)))  # lacing
+    d.line(pts([(4.2, 17.6), (9.8, 17.6)]), fill=(70, 40, 30, 255), width=round(s(0.6)))  # belt
+    for side, (sx, hx) in ((-1, (3.7, 2.5)), (1, (10.3, 11.3))):  # arms in sleeves, hands at the sides
+        arm = pts([(sx, 10.4), (sx + side * 0.2 - 1.4 * (side > 0) + 1.4 * (side < 0), 11), (hx + 0.7 * -side, 20.6), (hx - 0.6 * -side, 20.6)])
+        shaded_poly(img, [arm[0], arm[1], arm[2], arm[3]], linen, 0.3, 0.4)
+        d.ellipse([s(hx - 0.85), s(20.2), s(hx + 0.85), s(22.4)], fill=skin + (255,))
+    d.rectangle([s(6.3), s(7.6), s(7.7), s(9.6)], fill=mix(skin, (150, 100, 80), 0.2) + (255,))  # neck
+    d.ellipse([s(4.8), s(2.4), s(9.2), s(8.2)], fill=skin + (255,))
+    d.chord([s(6.6), s(2.6), s(9.2), s(8.1)], 290, 70, fill=mix(skin, (150, 100, 80), 0.35) + (140,))  # shaded cheek
+    d.pieslice([s(4.4), s(1.6), s(9.6), s(6.6)], 180, 360, fill=hair + (255,))
+    d.polygon(pts([(4.4, 4.1), (5.2, 4.0), (5.0, 6.4), (4.5, 6.0)]), fill=hair + (255,))
+    d.polygon(pts([(9.6, 4.1), (8.8, 4.0), (9.0, 6.4), (9.5, 6.0)]), fill=mix(hair, (120, 90, 40), 0.25) + (255,))
+    for x in (5.2, 6.4, 7.6, 8.6):  # strands catching the light
+        d.line(pts(curve((x, 2.0), (x - 0.4, 3.2), (x - 0.2, 4.2), 4)), fill=(250, 226, 160, 180), width=1)
+    for i in range(8):  # braid over the right shoulder
+        y = 6.0 + i * 1.9
+        x = 9.4 + 0.35 * i ** 0.6
+        w = 1.25 - i * 0.07
+        d.ellipse([s(x - w), s(y), s(x + w), s(y + 2.2)], fill=mix(hair, (130, 96, 44), 0.12 + 0.12 * (i % 2)) + (255,))
+        d.arc([s(x - w), s(y), s(x + w), s(y + 2.2)], 200, 290, fill=(252, 230, 170, 255), width=1)
+    d.ellipse([s(8.9), s(21.2), s(10.4), s(22.4)], fill=(170, 40, 34, 255))  # ribbon
+    for x in (5.9, 7.8):
+        d.ellipse([s(x), s(4.9), s(x + 0.55), s(5.5)], fill=(54, 60, 80, 255))
+        d.line(pts([(x - 0.2, 4.3), (x + 0.75, 4.2)]), fill=(170, 130, 70, 255), width=1)
+    d.line(pts([(7.1, 5.6), (7.3, 6.5), (7.0, 6.6)]), fill=(196, 140, 112, 255), width=1)
+    d.line(pts([(6.5, 7.15), (7.6, 7.15)]), fill=(178, 92, 80, 255), width=round(s(0.25)))
+    d.ellipse([s(5.3), s(6.0), s(6.3), s(6.8)], fill=(232, 150, 128, 110))
+    return img
 
 
 def kyllikki():
     img, d = sprite(18, 48)
-    skin = (222, 182, 150)
-    d.line([(s(1.4), s(20)), (s(0.8), s(48))], fill=(110, 78, 46, 255), width=round(s(1)))  # staff
-    d.ellipse([s(0.2), s(18.6), s(2.6), s(21)], fill=(130, 94, 56, 255))
-    shaded_poly(img, [(s(4.5), s(17)), (s(13.5), s(17)), (s(17), s(47.5)), (s(1.5), s(47.5))], (64, 58, 78))  # dress
-    shaded_poly(img, [(s(6.5), s(19)), (s(11.5), s(19)), (s(12.5), s(44)), (s(5.5), s(44))], (168, 160, 140), 0.2, 0.3)
-    for x0, x1 in ((s(2.4), s(5)), (s(13), s(15.6))):
-        shaded_poly(img, [(x0, s(18)), (x1, s(18)), (x1, s(32)), (x0, s(32))], (64, 58, 78))
-        d.ellipse([x0, s(31), x1, s(34)], fill=skin + (255,))
-    d.ellipse([s(5.2), s(6), s(12.8), s(16.6)], fill=skin + (255,))
-    d.ellipse([s(9.6), s(7), s(12.8), s(16)], fill=mix(skin, (120, 80, 70), 0.3) + (130,))
-    for y in (11.2, 12.6):  # wrinkles
-        d.arc([s(6), s(y), s(8.4), s(y + 1.2)], 200, 340, fill=(160, 110, 90, 200), width=1)
+    rng = random.Random(22)
+    skin, dress, shawl = (224, 184, 152), (62, 56, 76), (102, 96, 90)
+    d.line(pts([(2.0, 17.0), (1.2, 48)]), fill=(112, 80, 48, 255), width=round(s(0.9)))  # walking stick
+    d.ellipse([s(1.0), s(16.0), s(3.2), s(18.2)], fill=(132, 96, 58, 255))
+    for x in (6.6, 9.8):
+        d.ellipse([s(x), s(46.4), s(x + 2.6), s(48)], fill=(46, 36, 30, 255))
+    skirt = (curve((6.0, 25), (3.8, 36), (2.6, 46.8)) + curve((2.6, 46.8), (9.4, 48.2), (16.2, 46.8))
+             + curve((16.2, 46.8), (15.0, 36), (12.6, 25)))
+    shaded_poly(img, pts(skirt), dress, 0.28, 0.45)
+    folds(d, rng, [7.2, 8.6, 10.0, 11.4], [4.4, 7.6, 11.2, 14.4], 26, 46.8, dress)
+    apron = curve((7.0, 25.5), (6.0, 35), (6.4, 44)) + curve((6.4, 44), (9.4, 45), (12.4, 44)) + curve((12.4, 44), (12.8, 35), (11.6, 25.5))
+    shaded_poly(img, pts(apron), (166, 158, 140), 0.25, 0.35)
+    folds(d, rng, [8.4, 10.2], [7.8, 11.0], 26.5, 43.6, (166, 158, 140))
+    shaded_poly(img, pts([(5.0, 16.0), (7.0, 14.4), (11.6, 14.4), (13.6, 16.0), (13.0, 25.6), (5.6, 25.6)]), dress, 0.25, 0.45)
+    # Knitted shawl over the shoulders, crossed in front.
+    shaded_poly(img, pts([(4.2, 15.6), (6.6, 14.0), (12.0, 14.0), (14.4, 15.6), (13.6, 21.0), (9.3, 26.6), (5.0, 21.0)]),
+                shawl, 0.35, 0.45)
+    for i in range(7):
+        y = 16 + i * 1.4
+        d.line(pts([(5.2 + i * 0.45, y), (13.4 - i * 0.45, y)]), fill=mix(shawl, (40, 36, 34), 0.35) + (150,), width=1)
+    d.line(pts([(4.6, 21), (9.3, 26.6), (13.8, 21)]), fill=(150, 144, 132, 255), width=round(s(0.4)))  # fringe edge
+    for side, (sx, hx) in ((-1, (4.6, 3.2)), (1, (13.8, 15.0))):
+        arm = pts([(sx, 15.8), (sx - side * 1.6, 16.6), (hx - side * 0.8, 29.6), (hx + side * 0.6, 29.6)])
+        shaded_poly(img, arm, dress, 0.25, 0.45)
+        d.ellipse([s(hx - 1.0), s(29.0), s(hx + 1.0), s(31.6)], fill=skin + (255,))
+    d.ellipse([s(6.4), s(6.4), s(12.2), s(13.6)], fill=skin + (255,))
+    d.chord([s(9.2), s(6.6), s(12.2), s(13.5)], 290, 70, fill=mix(skin, (120, 80, 70), 0.35) + (150,))
     scarf = (156, 38, 34)
-    d.chord([s(4.2), s(4.4), s(13.8), s(14.4)], 160, 380, fill=scarf + (255,))  # over the crown
-    d.polygon([(s(4.4), s(9)), (s(5.6), s(9)), (s(6.6), s(16.4)), (s(5), s(16.6))], fill=scarf + (255,))  # sides
-    d.polygon([(s(13.6), s(9)), (s(12.4), s(9)), (s(11.4), s(16.4)), (s(13), s(16.6))], fill=mix(scarf, (20, 10, 10), 0.3) + (255,))
-    d.polygon([(s(8.2), s(17)), (s(9), s(16.6)), (s(9.8), s(17)), (s(9.4), s(18.4)), (s(8.6), s(18.4))], fill=mix(scarf, (20, 10, 10), 0.25) + (255,))  # knot at the throat
-    d.chord([s(4.6), s(4.8), s(10), s(10)], 180, 300, fill=(204, 84, 64, 150))  # sunlit fold
-    for x in (6.2, 8.6, 11):  # a few printed flowers on the cloth
-        d.ellipse([s(x), s(6.2), s(x + 0.8), s(7)], fill=(236, 214, 150, 220))
-    d.ellipse([s(6.9), s(10.4), s(7.7), s(11.2)], fill=(40, 40, 40, 255))
-    d.ellipse([s(10.1), s(10.4), s(10.9), s(11.2)], fill=(40, 40, 40, 255))
-    d.arc([s(7.2), s(13.2), s(10.6), s(14.8)], 20, 160, fill=(150, 90, 80, 255), width=2)
-    save(soften(img), "chars/kyllikki.png")
+    d.chord([s(5.6), s(4.6), s(13.0), s(12.6)], 160, 380, fill=scarf + (255,))
+    d.polygon(pts([(5.8, 8.4), (6.9, 8.4), (7.4, 13.6), (6.0, 13.8)]), fill=scarf + (255,))
+    d.polygon(pts([(12.8, 8.4), (11.7, 8.4), (11.2, 13.6), (12.6, 13.8)]), fill=mix(scarf, (20, 10, 10), 0.3) + (255,))
+    d.polygon(pts([(8.7, 14.0), (9.3, 13.7), (9.9, 14.0), (9.6, 15.2), (9.0, 15.2)]), fill=mix(scarf, (20, 10, 10), 0.25) + (255,))
+    d.chord([s(6.0), s(5.0), s(10.0), s(9.4)], 180, 300, fill=(206, 86, 66, 150))
+    for x in (7.2, 9.2, 11.2):
+        d.ellipse([s(x), s(6.4), s(x + 0.7), s(7.1)], fill=(236, 214, 150, 230))
+    for x in (7.6, 10.2):  # eyes, a little hooded
+        d.ellipse([s(x), s(9.6), s(x + 0.6), s(10.2)], fill=(40, 36, 36, 255))
+        d.arc([s(x - 0.3), s(9.1), s(x + 0.9), s(9.9)], 200, 340, fill=(150, 104, 86, 255), width=1)
+    for y in (11.4, 12.2):
+        d.arc([s(7.0), s(y), s(8.4), s(y + 0.7)], 200, 340, fill=(160, 112, 92, 200), width=1)
+        d.arc([s(10.4), s(y), s(11.8), s(y + 0.7)], 200, 340, fill=(140, 96, 80, 200), width=1)
+    d.line(pts([(9.2, 10.4), (9.5, 11.6), (9.1, 11.7)]), fill=(180, 126, 104, 255), width=1)
+    d.arc([s(8.2), s(12.0), s(10.4), s(13.0)], 20, 160, fill=(146, 84, 74, 255), width=round(s(0.25)))
+    return img
 
 
 def magpie():
@@ -667,7 +1162,7 @@ def magpie():
     d.ellipse([s(14.6), s(2.6), s(15.8), s(3.8)], fill=(232, 226, 210, 255))
     for x in (s(6.6), s(8.6)):
         d.line([(x, s(9.4)), (x, s(12))], fill=(40, 40, 40, 255), width=2)
-    save(soften(img, 0.5), "chars/magpie.png")
+    return img
 
 
 def skull():
@@ -680,7 +1175,7 @@ def skull():
     d.ellipse([s(8.2), s(3.4), s(11), s(6.2)], fill=(36, 30, 26, 255))
     for x in (s(4.6), s(6.4), s(8.2)):
         d.line([(x, s(9)), (x, s(11.4))], fill=(60, 50, 40, 255), width=2)
-    save(soften(img, 0.5), "objects/skull.png")
+    return img
 
 
 def bread(w, h):
@@ -739,6 +1234,16 @@ def fire():
     return img
 
 
+def shadow_sprite():
+    """A soft contact shadow the game draws under the player's feet."""
+    img = Image.new("L", (s(16), s(4)), 0)
+    ImageDraw.Draw(img).ellipse([s(1), s(0.6), s(15), s(3.4)], fill=150)
+    img = img.filter(ImageFilter.GaussianBlur(s(0.6)))
+    out = Image.new("RGBA", img.size, (24, 18, 10, 255))
+    out.putalpha(img)
+    save(out, "objects/shadow.png")
+
+
 def items():
     save(bread(16, 16), "items/bread.png")
     save(button(16, 16), "items/button.png")
@@ -754,9 +1259,10 @@ if __name__ == "__main__":
     village()
     path()
     grove()
-    vilja()
-    kyllikki()
-    magpie()
-    skull()
+    painted_sprite(vilja, "chars/vilja.png", 11)
+    painted_sprite(kyllikki, "chars/kyllikki.png", 12)
+    painted_sprite(magpie, "chars/magpie.png", 13, 0.3)
+    painted_sprite(skull, "objects/skull.png", 14, 0.3)
+    shadow_sprite()
     items()
     print("art written to", ASSETS)
