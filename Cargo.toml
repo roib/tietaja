@@ -18,3 +18,11 @@ opt-level = 3
 opt-level = "s"
 lto = "thin"
 codegen-units = 1
+
+# Browser build (tools/build_web.sh): as small as possible.
+[profile.web]
+inherits = "release"
+opt-level = "z"
+lto = "fat"
+strip = true
+panic = "abort"

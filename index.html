@@ -2,13 +2,91 @@
 <html lang="fi">
   <head>
     <meta charset="utf-8" />
+    <!-- No pinch-zoom: on phones the whole screen is the game. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="screen-orientation" content="landscape" />
     <title>Tietäjä</title>
-    <link data-trunk rel="rust" data-wasm-opt="s" />
-    <link data-trunk rel="copy-dir" href="assets" />
+    <!-- Start downloading the game while the title screen shows. -->
+    <link rel="preload" href="tietaja_bg.wasm" as="fetch" type="application/wasm" crossorigin />
     <style>
-      html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+      html, body {
+        margin: 0; height: 100%; background: #000; overflow: hidden;
+        /* Taps go to the game: no double-tap zoom, text selection or long-press menus. */
+        touch-action: none; user-select: none; -webkit-user-select: none;
+        -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;
+      }
       canvas { display: block; width: 100%; height: 100%; outline: none; }
+      .screen {
+        position: fixed; inset: 0; display: flex; flex-direction: column;
+        align-items: center; justify-content: center; gap: 12px; padding: 24px;
+        background: #120d09; color: #f0c46a; text-align: center;
+        font-family: Georgia, "Noto Serif", serif;
+      }
+      #start { cursor: pointer; }
+      .screen h1 { margin: 0; font-size: 56px; font-weight: normal; letter-spacing: 2px; }
+      .screen p { margin: 0; color: #b8a888; font-size: 18px; }
+      /* Phones held upright: ask for landscape (iPhones can't be locked to it). */
+      #rotate { display: none; z-index: 10; }
+      #rotate .phone {
+        width: 44px; height: 76px; border: 3px solid #f0c46a; border-radius: 8px;
+        animation: turn 2.4s ease-in-out infinite;
+      }
+      @keyframes turn { 0%, 30% { transform: rotate(0deg); } 60%, 100% { transform: rotate(-90deg); } }
+      @media (orientation: portrait) and (pointer: coarse) {
+        #rotate { display: flex; }
+      }
     </style>
   </head>
-  <body oncontextmenu="return false"></body>
+  <body oncontextmenu="return false">
+    <!-- Browsers only allow sound after a click, so the game starts on one. -->
+    <div id="start" class="screen">
+      <h1>Tietäjä</h1>
+      <p id="status">Click to begin</p>
+    </div>
+    <div id="rotate" class="screen">
+      <div class="phone"></div>
+      <p>Turn your phone sideways to play</p>
+    </div>
+    <script type="module">
+      import init from "./tietaja.js";
+
+      const start = document.getElementById("start");
+      const status = document.getElementById("status");
+      if (matchMedia("(pointer: coarse)").matches) {
+        status.textContent = "Tap to begin";
+      }
+
+      // On Android, go fullscreen and lock to landscape. Browsers only allow this
+      // in response to a tap, and iPhones don't allow it at all (the rotate
+      // screen covers that case), so failures are expected and ignored.
+      async function goLandscape() {
+        if (!matchMedia("(pointer: coarse)").matches) return;
+        try {
+          await document.documentElement.requestFullscreen?.({ navigationUI: "hide" });
+          await screen.orientation?.lock?.("landscape");
+        } catch (_) {}
+      }
+
+      start.addEventListener(
+        "click",
+        async () => {
+          status.textContent = "Loading…";
+          goLandscape();
+          try {
+            await init();
+          } catch (e) {
+            // winit leaves its event loop by throwing this on the web; the game keeps running.
+            if (!String(e).includes("Using exceptions for control flow")) {
+              status.textContent = "The game failed to start: " + e;
+              throw e;
+            }
+          }
+          start.remove();
+        },
+        { once: true },
+      );
+    </script>
+  </body>
 </html>

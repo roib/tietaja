@@ -167,7 +167,7 @@ fn main() {
         .insert_resource(SoundOn(true))
         .insert_resource(Babble { rng: 0x9E37_79B9_7F4A_7C15, ..default() })
         .add_systems(Startup, setup)
-        .add_systems(Update, (apply_font, toggle_sound, play_music, play_babble))
+        .add_systems(Update, (apply_font, toggle_sound, play_music, play_babble, scale_ui))
         .add_systems(
             Update,
             (update_viewport, handle_pointer, hover_items, move_player, run_dialogue).chain(),
@@ -339,19 +339,19 @@ fn update_viewport(window: Single<&Window>, mut camera: Single<&mut Camera, With
     }
 }
 
-/// The room-pixel position under the cursor, if the cursor is over the room.
-fn cursor_in_room(window: &Window, camera: &Camera, transform: &GlobalTransform) -> Option<Vec2> {
-    let cursor = window.cursor_position()?;
-    if cursor.y > window.height() * SCENE_FRACTION {
+/// The room-pixel position under a window position, if it is over the room.
+fn point_in_room(window: &Window, camera: &Camera, transform: &GlobalTransform, pos: Vec2) -> Option<Vec2> {
+    if pos.y > window.height() * SCENE_FRACTION {
         return None;
     }
-    let world = camera.viewport_to_world_2d(transform, cursor).ok()?;
+    let world = camera.viewport_to_world_2d(transform, pos).ok()?;
     let p = world_to_room(world);
     (p.x >= 0.0 && p.x < ROOM_WIDTH && p.y >= 0.0 && p.y < ROOM_HEIGHT).then_some(p)
 }
 
 fn handle_pointer(
     mouse: Res<ButtonInput<MouseButton>>,
+    touches: Res<Touches>,
     keys: Res<ButtonInput<KeyCode>>,
     window: Single<&Window>,
     camera: Single<(&Camera, &GlobalTransform), With<SceneCamera>>,
@@ -361,10 +361,13 @@ fn handle_pointer(
     mut ui: ResMut<Ui>,
     mut player: ResMut<Player>,
 ) {
-    // Any click (or Space/Enter) moves past the current line of speech.
+    // On touch screens a tap is a click where the finger lands (there is no hover).
+    let tap = touches.iter_just_pressed().next().map(|t| t.position());
+
+    // Any click or tap (or Space/Enter) moves past the current line of speech.
     if talk.line.is_some() {
         let skip = [KeyCode::Space, KeyCode::Enter, KeyCode::Period];
-        if mouse.just_pressed(MouseButton::Left) || keys.any_just_pressed(skip) {
+        if mouse.just_pressed(MouseButton::Left) || tap.is_some() || keys.any_just_pressed(skip) {
             talk.line = None;
         }
         return;
@@ -379,7 +382,8 @@ fn handle_pointer(
     }
 
     let (camera, transform) = *camera;
-    let Some(p) = cursor_in_room(&window, camera, transform) else {
+    let pointer = tap.or_else(|| window.cursor_position());
+    let Some(p) = pointer.and_then(|pos| point_in_room(&window, camera, transform, pos)) else {
         ui.hover = None;
         return;
     };
@@ -387,7 +391,7 @@ fn handle_pointer(
     let hotspot = room.hotspot_at(p.x, p.y, &game.0);
     ui.hover = hotspot.map(|h| h.name.clone());
 
-    let left = mouse.just_pressed(MouseButton::Left);
+    let left = mouse.just_pressed(MouseButton::Left) || tap.is_some();
     let right = mouse.just_pressed(MouseButton::Right);
     if !left && !right {
         return;
@@ -667,6 +671,7 @@ fn update_speech(
     camera: Single<(&Camera, &GlobalTransform), With<SceneCamera>>,
     speech_box: Single<&mut Node, With<SpeechBox>>,
     speech_text: Single<(&mut Text, &mut TextColor, &mut TextFont), With<SpeechText>>,
+    ui_scale: Res<UiScale>,
 ) {
     let mut node = speech_box.into_inner();
     let Some((speaker, line)) = &talk.line else {
@@ -694,16 +699,18 @@ fn update_speech(
     let Ok(screen) = camera.world_to_viewport(transform, room_to_world(anchor).extend(0.0)) else {
         return;
     };
+    // Computed in window pixels, then converted to UI units (window pixels / UiScale).
+    let k = ui_scale.0;
     let width = (window.width() * 0.5).clamp(240.0, 520.0);
-    node.left = px((screen.x - width / 2.0).clamp(8.0, (window.width() - width - 8.0).max(8.0)));
-    node.bottom = px(window.height() - screen.y.max(60.0));
-    node.width = px(width);
+    node.left = px((screen.x - width / 2.0).clamp(8.0, (window.width() - width - 8.0).max(8.0)) / k);
+    node.bottom = px((window.height() - screen.y.max(60.0)) / k);
+    node.width = px(width / k);
     node.justify_content = JustifyContent::Center;
 
     let (mut text, mut color, mut font) = speech_text.into_inner();
     let rgb = story.characters.get(speaker).map_or([255, 255, 255], |c| c.color);
     color.0 = Color::srgb_u8(rgb[0], rgb[1], rgb[2]);
-    let size = (window.height() * SCENE_FRACTION / ROOM_HEIGHT * 6.0).clamp(16.0, 28.0);
+    let size = (window.height() * SCENE_FRACTION / ROOM_HEIGHT * 6.0).clamp(15.0, 28.0) / k;
     if font.font_size != FontSize::Px(size) {
         font.font_size = FontSize::Px(size);
     }
@@ -872,4 +879,13 @@ fn next_random(state: &mut u64) -> f32 {
     *state ^= *state >> 7;
     *state ^= *state << 17;
     (*state >> 40) as f32 / (1u64 << 24) as f32
+}
+
+/// Shrink the interface on small screens (phones) and grow it on big ones.
+/// Sizes in the UI are designed for a 1280x720 window.
+fn scale_ui(window: Single<&Window>, mut ui_scale: ResMut<UiScale>) {
+    let scale = (window.width() / 1280.0).min(window.height() / 720.0).clamp(0.6, 1.6);
+    if (ui_scale.0 - scale).abs() > 0.01 {
+        ui_scale.0 = scale;
+    }
 }
