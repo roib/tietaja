@@ -71,7 +71,7 @@ struct Player {
     walked: f32,
 }
 
-/// Vilja standing (frame 0) and her four-step walk cycle.
+/// Vilja standing (frame 0, turned three-quarters) and her walk cycle in profile.
 #[derive(Resource)]
 struct PlayerFrames(Vec<Handle<Image>>);
 
@@ -225,7 +225,9 @@ fn world_to_room(p: Vec2) -> Vec2 {
 }
 
 fn setup(mut commands: Commands, assets: Res<AssetServer>, story: Res<StoryRes>) {
-    let frames: Vec<Handle<Image>> = (0..5).map(|i| assets.load(format!("chars/vilja_{i}.png"))).collect();
+    let frames: Vec<Handle<Image>> = std::iter::once(assets.load("chars/vilja_stand.png"))
+        .chain((0..4).map(|i| assets.load(format!("chars/vilja_walk_{i}.png"))))
+        .collect();
     commands.insert_resource(PlayerFrames(frames.clone()));
     commands.insert_resource(GameFont(assets.load(FONT)));
     let mut voices = VoiceBank::default();
@@ -684,6 +686,8 @@ fn sync_choices(mut commands: Commands, talk: Res<Talk>, panel: Single<(Entity, 
 fn draw_player(
     player: Res<Player>,
     frames: Res<PlayerFrames>,
+    story: Res<StoryRes>,
+    game: Res<Game>,
     mut sprite: Single<(&mut Transform, &mut Sprite), With<PlayerSprite>>,
 ) {
     let (transform, sprite) = &mut *sprite;
@@ -693,6 +697,8 @@ fn draw_player(
     if sprite.image != frames.0[frame] {
         sprite.image = frames.0[frame].clone();
     }
+    let [r, g, b] = story.0.room(&game.0.room).light;
+    sprite.color = Color::srgb_u8(r, g, b); // she takes on the room's light
 }
 
 fn set_display(node: &mut Node, show: bool) {

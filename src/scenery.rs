@@ -1,6 +1,6 @@
 //! What a room looks like and how it moves: the painting, a sky drifting behind it, the
 //! hotspot sprites (characters breathe), and the room's effects: birds crossing the sky,
-//! glints on water, butterflies, dust in sunbeams, falling leaves, chimney smoke, firelight.
+//! glints on water, dust in sunbeams, falling leaves, chimney smoke, firelight.
 
 use bevy::{prelude::*, sprite::Anchor};
 
@@ -68,7 +68,6 @@ struct EffectArt {
     leaf: Handle<Image>,
     glow: Handle<Image>,
     bird: [Handle<Image>; 2],
-    butterfly: [Handle<Image>; 2],
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -124,8 +123,13 @@ fn sync_scenery(
         };
         let r = hotspot.rect;
         let feet = room_to_world(Vec2::new(r.x + r.w / 2.0, r.y + r.h)).extend(1.0 + (r.y + r.h) / 1000.0);
+        let [lr, lg, lb] = room.light;
         let mut entity = commands.spawn((
-            Sprite { custom_size: Some(Vec2::new(r.w, r.h)), ..Sprite::from_image(assets.load(sprite.clone())) },
+            Sprite {
+                custom_size: Some(Vec2::new(r.w, r.h)),
+                color: Color::srgb_u8(lr, lg, lb), // in the room's light
+                ..Sprite::from_image(assets.load(sprite.clone()))
+            },
             Anchor::BOTTOM_CENTER,
             Transform::from_translation(feet),
             HotspotSprite,
@@ -159,7 +163,6 @@ fn load_effect_art(mut commands: Commands, assets: Res<AssetServer>) {
             leaf: assets.load("effects/leaf.png"),
             glow: assets.load("intro/ember.png"),
             bird: [assets.load("effects/bird_0.png"), assets.load("effects/bird_1.png")],
-            butterfly: [assets.load("effects/butterfly_0.png"), assets.load("effects/butterfly_1.png")],
     });
 }
 
@@ -172,7 +175,6 @@ impl EffectArt {
             EffectKind::Leaves => self.leaf.clone(),
             EffectKind::Glow => self.glow.clone(),
             EffectKind::Birds => self.bird[0].clone(),
-            EffectKind::Butterflies => self.butterfly[0].clone(),
         }
     }
 }
@@ -186,7 +188,6 @@ fn look(kind: EffectKind, rect: RoomRect) -> (Vec2, f32) {
         EffectKind::Leaves => (Vec2::new(2.6, 2.0), 2.4),
         EffectKind::Glow => (Vec2::new(rect.w, rect.h) * 1.5, 1.2),
         EffectKind::Birds => (Vec2::new(5.0, 2.5), -0.5),
-        EffectKind::Butterflies => (Vec2::new(3.4, 2.7), 1.3),
     }
 }
 
@@ -308,22 +309,6 @@ fn animate_effects(
                     p.pos += Vec2::new((t * 0.3 + p.phase).sin() * 0.8, -0.4 + (t * 0.5 + p.phase * 2.0).cos() * 0.5) * dt;
                     wrap(&mut p.pos, r);
                     alpha = 0.25 + 0.35 * (t * 0.8 + p.phase).sin().max(0.0);
-                }
-                EffectKind::Butterflies => {
-                    // Flutter about the meadow, drifting toward a new spot now and then.
-                    if p.vel == Vec2::ZERO || next_random(&mut rng) < dt * 0.4 {
-                        let goal = Vec2::new(r.x + next_random(&mut rng) * r.w, r.y + next_random(&mut rng) * r.h);
-                        p.vel = (goal - p.pos).normalize_or_zero() * (6.0 + next_random(&mut rng) * 5.0);
-                    }
-                    p.pos += p.vel * dt;
-                    p.pos.x = p.pos.x.clamp(r.x, r.x + r.w);
-                    p.pos.y = p.pos.y.clamp(r.y, r.y + r.h);
-                    let flap = ((t * 14.0 + p.phase) as i32 % 2) as usize;
-                    sprite.image = art.butterfly[flap].clone();
-                    sprite.flip_x = p.vel.x < 0.0;
-                    transform.translation = room_to_world(p.pos + Vec2::new(0.0, (t * 9.0 + p.phase).sin() * 0.6)).extend(depth);
-                    sprite.color = Color::WHITE;
-                    continue;
                 }
                 EffectKind::Leaves => {
                     // Drifting down, swaying and turning.

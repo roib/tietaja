@@ -69,7 +69,6 @@ pub enum EffectKind {
     Birds,
     Sparkles,
     Motes,
-    Butterflies,
     Leaves,
     Smoke,
     Glow,
@@ -81,7 +80,6 @@ impl EffectKind {
             "birds" => Self::Birds,
             "sparkles" => Self::Sparkles,
             "motes" => Self::Motes,
-            "butterflies" => Self::Butterflies,
             "leaves" => Self::Leaves,
             "smoke" => Self::Smoke,
             "glow" => Self::Glow,
@@ -110,6 +108,8 @@ pub struct Room {
     pub music: Option<String>,
     /// A wide sky image that drifts slowly behind the room (whose own sky is transparent).
     pub sky: Option<String>,
+    /// The colour of the room's light, which tints the characters and objects in it.
+    pub light: [u8; 3],
     pub effects: Vec<Effect>,
     pub hotspots: Vec<Hotspot>,
 }
@@ -307,6 +307,7 @@ impl Story {
                             enter: None,
                             music: None,
                             sky: None,
+                            light: [255, 255, 255],
                             effects: Vec::new(),
                             hotspots: Vec::new(),
                         });
@@ -421,11 +422,12 @@ fn parse_room_line(room: &mut Room, line: &str) -> Result<(), String> {
         "enter:" => room.enter = Some(rest.to_string()),
         "music:" => room.music = Some(rest.to_string()),
         "sky:" => room.sky = Some(rest.to_string()),
+        "light:" => room.light = parse_color(rest)?,
         "effect" => {
             let usage = "expected `effect <kind>: x y w h [| count N] [| if <conditions>]`";
             let (kind, rest) = rest.split_once(':').ok_or(usage)?;
             let kind = EffectKind::parse(kind.trim()).ok_or_else(|| {
-                format!("unknown effect `{}` (try birds, sparkles, motes, butterflies, leaves, smoke, glow)", kind.trim())
+                format!("unknown effect `{}` (try birds, sparkles, motes, leaves, smoke, glow)", kind.trim())
             })?;
             let mut fields = rest.split('|').map(str::trim);
             let nums: Vec<f32> = fields.next().unwrap_or_default().split_whitespace().map(parse_num).collect::<Result<_, _>>()?;

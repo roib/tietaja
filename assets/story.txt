@@ -11,9 +11,10 @@
 #     enter: <node>                            node run every time you enter
 #     music: <file>                            looping music (rooms sharing a file keep playing)
 #     sky: <image>                             a sky twice the room's width that drifts behind it
+#     light: #rrggbb                           the room's light, tinting characters and objects
 #     effect <kind>: x y w h [| count N] [| if <conditions>]
 #                                              life in the room: birds, sparkles (on water), motes
-#                                              (dust in sunbeams), butterflies, leaves, smoke, glow
+#                                              (dust in sunbeams), leaves, smoke, glow
 #     hotspot <id>: <Name> | x y w h [| sprite <image>] [| if <conditions>]
 #     exit <id>: <Name> | x y w h | to <room> <x>
 #
@@ -56,10 +57,10 @@ item tinder: Tinder fungus | items/tinder.png
 room village: Kylä, the village
   background: rooms/village.png
   sky: rooms/village_sky.png
+  light: #ffe4d8
   music: music/village.ogg
   effect birds: 0 8 320 40
   effect sparkles: 100 79 76 7 | count 14
-  effect butterflies: 92 88 90 18 | count 2
   effect smoke: 241 6 8 12 | count 10 | if fire_lit
   effect glow: 132 80 40 30 | if fire_lit
   floor: 112 140
@@ -76,9 +77,9 @@ room village: Kylä, the village
 room path: Polku, the forest path
   background: rooms/path.png
   sky: rooms/path_sky.png
+  light: #ffe2d0
   music: music/path.ogg
   effect birds: 140 10 180 50
-  effect butterflies: 150 92 150 22 | count 3
   effect motes: 40 20 110 90 | count 14
   floor: 118 140
   hotspot spruce: Old spruce | 128 0 64 112
@@ -90,6 +91,7 @@ room path: Polku, the forest path
 room grove: Hiisi, the sacred grove
   background: rooms/grove.png
   sky: rooms/grove_sky.png
+  light: #dfe6e0
   music: music/grove.ogg
   effect leaves: 120 0 130 100 | count 8
   effect motes: 60 10 150 100 | count 24
