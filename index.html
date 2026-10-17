@@ -40,10 +40,9 @@
     </style>
   </head>
   <body oncontextmenu="return false">
-    <!-- Browsers only allow sound after a click, so the game starts on one. -->
+    <!-- Browsers only allow sound after a click, so the game (and its intro) starts on one. -->
     <div id="start" class="screen">
-      <h1>Tietäjä</h1>
-      <p id="status">Click to begin</p>
+      <p id="status">Click to start · sound on</p>
     </div>
     <div id="rotate" class="screen">
       <div class="phone"></div>
@@ -55,7 +54,7 @@
       const start = document.getElementById("start");
       const status = document.getElementById("status");
       if (matchMedia("(pointer: coarse)").matches) {
-        status.textContent = "Tap to begin";
+        status.textContent = "Tap to start · sound on";
       }
 
       // On Android, go fullscreen and lock to landscape. Browsers only allow this

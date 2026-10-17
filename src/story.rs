@@ -63,6 +63,42 @@ pub struct Hotspot {
     pub exit: Option<(String, f32)>,
 }
 
+/// Something alive in a room: birds crossing the sky, glints on water, drifting leaves...
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EffectKind {
+    Birds,
+    Sparkles,
+    Motes,
+    Butterflies,
+    Leaves,
+    Smoke,
+    Glow,
+}
+
+impl EffectKind {
+    fn parse(name: &str) -> Option<Self> {
+        Some(match name {
+            "birds" => Self::Birds,
+            "sparkles" => Self::Sparkles,
+            "motes" => Self::Motes,
+            "butterflies" => Self::Butterflies,
+            "leaves" => Self::Leaves,
+            "smoke" => Self::Smoke,
+            "glow" => Self::Glow,
+            _ => return None,
+        })
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct Effect {
+    pub kind: EffectKind,
+    /// The area the effect lives in (room pixels).
+    pub rect: Rect,
+    pub count: u32,
+    pub conds: Vec<Cond>,
+}
+
 #[derive(Clone, Debug)]
 pub struct Room {
     pub id: String,
@@ -72,6 +108,9 @@ pub struct Room {
     pub floor: (f32, f32),
     pub enter: Option<String>,
     pub music: Option<String>,
+    /// A wide sky image that drifts slowly behind the room (whose own sky is transparent).
+    pub sky: Option<String>,
+    pub effects: Vec<Effect>,
     pub hotspots: Vec<Hotspot>,
 }
 
@@ -267,6 +306,8 @@ impl Story {
                             floor: (100.0, 140.0),
                             enter: None,
                             music: None,
+                            sky: None,
+                            effects: Vec::new(),
                             hotspots: Vec::new(),
                         });
                         block = Block::Room;
@@ -379,6 +420,29 @@ fn parse_room_line(room: &mut Room, line: &str) -> Result<(), String> {
         "background:" => room.background = rest.to_string(),
         "enter:" => room.enter = Some(rest.to_string()),
         "music:" => room.music = Some(rest.to_string()),
+        "sky:" => room.sky = Some(rest.to_string()),
+        "effect" => {
+            let usage = "expected `effect <kind>: x y w h [| count N] [| if <conditions>]`";
+            let (kind, rest) = rest.split_once(':').ok_or(usage)?;
+            let kind = EffectKind::parse(kind.trim()).ok_or_else(|| {
+                format!("unknown effect `{}` (try birds, sparkles, motes, butterflies, leaves, smoke, glow)", kind.trim())
+            })?;
+            let mut fields = rest.split('|').map(str::trim);
+            let nums: Vec<f32> = fields.next().unwrap_or_default().split_whitespace().map(parse_num).collect::<Result<_, _>>()?;
+            let [x, y, w, h] = nums[..] else {
+                return Err(usage.into());
+            };
+            let mut effect = Effect { kind, rect: Rect { x, y, w, h }, count: 1, conds: Vec::new() };
+            for field in fields {
+                let (opt, value) = field.split_once(' ').ok_or(usage)?;
+                match opt {
+                    "count" => effect.count = parse_num(value)? as u32,
+                    "if" => effect.conds = parse_conds(value),
+                    _ => return Err(format!("unknown effect option `{opt}`")),
+                }
+            }
+            room.effects.push(effect);
+        }
         "floor:" => {
             let (a, b) = rest.split_once(' ').ok_or("expected `floor: <top> <bottom>`")?;
             room.floor = (parse_num(a)?, parse_num(b)?);
@@ -626,6 +690,7 @@ mod tests {
         let mut paths: Vec<String> = Vec::new();
         for room in &story.rooms {
             paths.push(room.background.clone());
+            paths.extend(room.sky.clone());
             paths.extend(room.music.clone());
             paths.extend(room.hotspots.iter().filter_map(|h| h.sprite.clone()));
         }
@@ -640,7 +705,8 @@ mod tests {
     }
 
     /// The game stretches each image to its room or hotspot size, so painted art must be
-    /// exactly ART_SCALE times larger or it would be distorted.
+    /// exactly ART_SCALE times larger (characters may be painted at twice that, for detail),
+    /// or it would be distorted.
     #[test]
     fn art_matches_room_and_hotspot_sizes() {
         const ART_SCALE: f32 = 4.0;
@@ -658,16 +724,35 @@ mod tests {
             if actual != expected {
                 wrong.push(format!("{}: {actual:?}, expected {expected:?}", room.background));
             }
+            if let Some(sky) = &room.sky {
+                let expected = (expected.0 * 2, expected.1); // twice as wide, to drift across
+                let actual = png_size(&root.join(sky));
+                if actual != expected {
+                    wrong.push(format!("{sky}: {actual:?}, expected {expected:?}"));
+                }
+            }
             for h in &room.hotspots {
                 let Some(sprite) = &h.sprite else { continue };
-                let expected = ((h.rect.w * ART_SCALE) as u32, (h.rect.h * ART_SCALE) as u32);
+                let at = |k: f32| ((h.rect.w * ART_SCALE * k) as u32, (h.rect.h * ART_SCALE * k) as u32);
+                let (expected, detailed) = (at(1.0), at(2.0));
                 let actual = png_size(&root.join(sprite));
-                if actual != expected {
+                if actual != expected && actual != detailed {
                     wrong.push(format!("{sprite} (hotspot {}): {actual:?}, expected {expected:?}", h.id));
                 }
             }
         }
         assert!(wrong.is_empty(), "art at the wrong size:\n  {}", wrong.join("\n  "));
+    }
+
+    #[test]
+    fn effects_parse_with_counts_and_conditions() {
+        let src = "start: a 10\nroom a: A\n  effect sparkles: 1 2 3 4 | count 12\n  effect smoke: 5 6 7 8 | if fire_lit\n";
+        let story = Story::parse(src).unwrap();
+        let effects = &story.room("a").effects;
+        assert_eq!((effects[0].kind, effects[0].count), (EffectKind::Sparkles, 12));
+        assert_eq!(effects[1].conds, parse_conds("fire_lit"));
+        let err = Story::parse("start: a 10\nroom a: A\n  effect fireworks: 1 2 3 4\n").unwrap_err();
+        assert!(err.contains("unknown effect `fireworks`"), "{err}");
     }
 
     #[test]

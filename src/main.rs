@@ -1,3 +1,5 @@
+mod intro;
+mod scenery;
 mod story;
 
 use std::collections::{HashMap, VecDeque};
@@ -10,6 +12,8 @@ use bevy::{
     sprite::Anchor,
     ui_widgets::{Activate, Button, observe},
 };
+use intro::{IntroPlugin, Screen};
+use scenery::SceneryPlugin;
 use story::{Choice, Dialogue, GameState, ROOM_HEIGHT, ROOM_WIDTH, Step, Story, VOICE_SYLLABLES, Verb};
 
 /// The painting and the verb panel beneath it form one framed block, centered in the
@@ -63,7 +67,16 @@ struct Player {
     target: Option<Vec2>,
     pending: Option<Action>,
     facing_left: bool,
+    /// Distance walked, which picks the walk-cycle frame.
+    walked: f32,
 }
+
+/// Vilja standing (frame 0) and her four-step walk cycle.
+#[derive(Resource)]
+struct PlayerFrames(Vec<Handle<Image>>);
+
+/// Room units walked per frame of the walk cycle.
+const STRIDE: f32 = 4.5;
 
 #[derive(Clone)]
 enum Action {
@@ -103,9 +116,6 @@ struct SceneCamera;
 
 #[derive(Component)]
 struct PlayerSprite;
-
-#[derive(Component)]
-struct RoomEntity;
 
 #[derive(Component)]
 struct SentenceText;
@@ -171,22 +181,28 @@ fn main() {
             target: None,
             pending: None,
             facing_left: false,
+            walked: 0.0,
         })
         .insert_resource(talk)
         .insert_resource(Ui { verb: Verb::Walk, held: None, hover: None })
         .insert_resource(StoryRes(story))
         .insert_resource(SoundOn(true))
         .insert_resource(Babble { rng: 0x9E37_79B9_7F4A_7C15, ..default() })
+        .add_plugins((IntroPlugin, SceneryPlugin))
         .add_systems(Startup, setup)
-        .add_systems(Update, (apply_font, toggle_sound, play_music, play_babble, scale_ui))
+        .add_systems(Update, (apply_font, toggle_sound, play_music.run_if(in_state(Screen::Playing)), play_babble, scale_ui))
         .add_systems(
             Update,
-            (layout, handle_pointer, hover_items, move_player, run_dialogue).chain(),
+            (
+                layout,
+                // The game itself waits until the intro is over.
+                (handle_pointer, hover_items, move_player, run_dialogue).run_if(in_state(Screen::Playing)),
+            )
+                .chain(),
         )
         .add_systems(
             Update,
             (
-                sync_room.run_if(resource_changed::<Game>),
                 sync_inventory.run_if(resource_changed::<Game>),
                 sync_choices.run_if(resource_changed::<Talk>),
                 draw_player,
@@ -209,6 +225,8 @@ fn world_to_room(p: Vec2) -> Vec2 {
 }
 
 fn setup(mut commands: Commands, assets: Res<AssetServer>, story: Res<StoryRes>) {
+    let frames: Vec<Handle<Image>> = (0..5).map(|i| assets.load(format!("chars/vilja_{i}.png"))).collect();
+    commands.insert_resource(PlayerFrames(frames.clone()));
     commands.insert_resource(GameFont(assets.load(FONT)));
     let mut voices = VoiceBank::default();
     for (name, character) in &story.0.characters {
@@ -237,7 +255,7 @@ fn setup(mut commands: Commands, assets: Res<AssetServer>, story: Res<StoryRes>)
     ));
 
     commands.spawn((
-        Sprite { custom_size: Some(PLAYER_SIZE), ..Sprite::from_image(assets.load("chars/vilja.png")) },
+        Sprite { custom_size: Some(PLAYER_SIZE), ..Sprite::from_image(frames[0].clone()) },
         Anchor::BOTTOM_CENTER,
         PlayerSprite,
         // A soft shadow at her feet, cast to the right like the painted shadows.
@@ -542,6 +560,7 @@ fn move_player(
     if to_target.length() > step {
         player.facing_left = to_target.x < 0.0;
         player.pos += to_target.normalize() * step;
+        player.walked += step;
         return;
     }
     player.pos = target;
@@ -581,43 +600,6 @@ fn run_dialogue(story: Res<StoryRes>, mut game: ResMut<Game>, mut talk: ResMut<T
         }
     }
     talk.dialogue = Some(dialogue);
-}
-
-fn sync_room(
-    mut commands: Commands,
-    assets: Res<AssetServer>,
-    story: Res<StoryRes>,
-    game: Res<Game>,
-    existing: Query<Entity, With<RoomEntity>>,
-) {
-    for entity in &existing {
-        commands.entity(entity).despawn();
-    }
-    let room = story.0.room(&game.0.room);
-    // Art is painted at a higher resolution than the room; draw everything at room size.
-    commands.spawn((
-        Sprite {
-            custom_size: Some(Vec2::new(ROOM_WIDTH, ROOM_HEIGHT)),
-            ..Sprite::from_image(assets.load(room.background.clone()))
-        },
-        Transform::default(),
-        RoomEntity,
-    ));
-    for hotspot in room.hotspots.iter().filter(|h| game.0.check(&h.conds)) {
-        let Some(sprite) = &hotspot.sprite else {
-            continue;
-        };
-        let (cx, cy) = hotspot.rect.center();
-        let depth = 1.0 + (hotspot.rect.y + hotspot.rect.h) / 1000.0;
-        commands.spawn((
-            Sprite {
-                custom_size: Some(Vec2::new(hotspot.rect.w, hotspot.rect.h)),
-                ..Sprite::from_image(assets.load(sprite.clone()))
-            },
-            Transform::from_translation(room_to_world(Vec2::new(cx, cy)).extend(depth)),
-            RoomEntity,
-        ));
-    }
 }
 
 fn sync_inventory(
@@ -699,10 +681,18 @@ fn sync_choices(mut commands: Commands, talk: Res<Talk>, panel: Single<(Entity, 
     });
 }
 
-fn draw_player(player: Res<Player>, mut sprite: Single<(&mut Transform, &mut Sprite), With<PlayerSprite>>) {
+fn draw_player(
+    player: Res<Player>,
+    frames: Res<PlayerFrames>,
+    mut sprite: Single<(&mut Transform, &mut Sprite), With<PlayerSprite>>,
+) {
     let (transform, sprite) = &mut *sprite;
     transform.translation = room_to_world(player.pos).extend(1.0 + player.pos.y / 1000.0);
     sprite.flip_x = player.facing_left;
+    let frame = if player.target.is_some() { 1 + (player.walked / STRIDE) as usize % 4 } else { 0 };
+    if sprite.image != frames.0[frame] {
+        sprite.image = frames.0[frame].clone();
+    }
 }
 
 fn set_display(node: &mut Node, show: bool) {

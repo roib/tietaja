@@ -25,9 +25,9 @@ SYLLABLES_PER_VOICE = 6
 # ---------------------------------------------------------------- output
 
 
-def write_ogg(samples, path, quality=3):
+def write_ogg(samples, path, quality=3, peak_level=0.9):
     peak = max(1e-9, max(abs(s) for s in samples))
-    gain = 0.9 / peak
+    gain = peak_level / peak
     out = ASSETS / path
     out.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile(suffix=".wav") as tmp:
@@ -351,11 +351,263 @@ def voices():
             write_ogg(clip, f"voices/{name}/{i}.ogg", 4)
 
 
+# ---------------------------------------------------------------- intro score
+#
+# The intro sequence in src/main.rs is timed to this music (INTRO_* constants there).
+
+INTRO_FIRE_OUT = 16.0  # the last ember dies
+INTRO_HIT = 28.0  # the title lands
+INTRO_LENGTH = 52.0
+INTRO_SKIP_LEAD = 0.6  # skipping lands this many seconds before the hit
+MINOR = ["D", "E", "F", "G", "A", "Bb", "C"]
+
+
+def add_once(track, start, samples, gain):
+    """Mix into a one-shot track (no wrapping; anything past the end is dropped)."""
+    s0 = int(start * SR)
+    for i, v in enumerate(samples[: max(0, len(track) - s0)]):
+        track[s0 + i] += v * gain
+
+
+def wavetable(amps, rng=None, size=2048):
+    """One cycle of a waveform made of harmonics with the given amplitudes."""
+    phases = [0.0] + [rng.uniform(0, 6.28) if rng else 0.0 for _ in amps[1:]]
+    return [sum(a * math.sin(2 * math.pi * (k + 1) * i / size + phases[k]) for k, a in enumerate(amps)) for i in range(size)]
+
+
+def choir_table(f0, rng, vowel="a"):
+    f1, f2, f3 = {"a": (730, 1100, 2600), "o": (500, 850, 2500)}[vowel]
+    amps, k = [], 1
+    while k * f0 < 4500 and k <= 40:
+        h = k * f0
+        amps.append((0.22 + resonance(h, f1, 110) + 0.6 * resonance(h, f2, 150) + 0.2 * resonance(h, f3, 220)) / k)
+        k += 1
+    return wavetable(amps, rng)
+
+
+HORN = [1.0, 0.75, 0.55, 0.4, 0.28, 0.18, 0.12, 0.08, 0.05, 0.03]
+SOFT = [1.0, 0.45, 0.25, 0.12, 0.06]
+
+
+def synth(track, start, dur, f, table, gain, attack=0.3, release=0.8, vibrato=0.0, vib_rate=5.0, rng=None, wrap=False):
+    """Play a sustained note from a wavetable with an attack/release envelope."""
+    size = len(table)
+    n = int((dur + release) * SR)
+    s0 = int(start * SR)
+    phase = rng.random() * size if rng else 0.0
+    length = len(track)
+    for i in range(n):
+        idx = s0 + i
+        if idx >= length:
+            if not wrap:
+                break
+            idx %= length
+        t = i / SR
+        env = min(1.0, t / attack) if t < dur else max(0.0, 1 - (t - dur) / release)
+        ff = f * (1 + vibrato * math.sin(2 * math.pi * vib_rate * t)) if vibrato else f
+        phase += ff * size / SR
+        track[idx] += table[int(phase) % size] * env * gain
+
+
+def frame_drum(rng, pitch=1.0):
+    """A shaman's frame drum: a deep thud that falls in pitch, with a skin slap on top."""
+    out, ph = [], 0.0
+    n = int(1.1 * SR)
+    for i in range(n):
+        t = i / SR
+        f = (50 + 48 * math.exp(-t * 16)) * pitch
+        ph += 2 * math.pi * f / SR
+        v = math.sin(ph) * math.exp(-t * 4.2) + 0.3 * math.sin(ph * 2.3) * math.exp(-t * 9)
+        if i < 0.014 * SR:
+            v += rng.uniform(-1, 1) * 0.45 * (1 - i / (0.014 * SR))
+        out.append(v)
+    return out
+
+
+def bell(rng, f, dur=2.5):
+    """Glassy aurora shimmer: inharmonic partials that ring and fade."""
+    parts = [(1.0, 1.0, 1.2), (2.76, 0.45, 2.0), (5.4, 0.22, 3.0), (8.93, 0.1, 4.2)]
+    phases = [rng.uniform(0, 6.28) for _ in parts]
+    n = int(dur * SR)
+    return [sum(a * math.sin(2 * math.pi * f * m * i / SR + p) * math.exp(-i / SR * d)
+                for (m, a, d), p in zip(parts, phases)) * min(1.0, i / (0.004 * SR)) for i in range(n)]
+
+
+def wind(track, rng, gain, start=0.0, end=None, wrap_period=None):
+    """Night wind: low-passed noise that gusts slowly."""
+    end = end if end is not None else len(track) / SR
+    lp1 = lp2 = 0.0
+    period = wrap_period or 7.3
+    for i in range(int(start * SR), min(len(track), int(end * SR))):
+        x = rng.uniform(-1, 1)
+        lp1 += 0.03 * (x - lp1)
+        lp2 += 0.004 * (x - lp2)
+        t = i / SR
+        gust = 0.55 + 0.45 * math.sin(2 * math.pi * t / period) * math.sin(2 * math.pi * t / (period * 2.7) + 1)
+        track[i] += (lp1 - lp2) * 6 * gain * gust
+
+
+def cymbal(rng, swell, ring):
+    """A rolled cymbal: a hissing crescendo, then the crash ringing out."""
+    out, prev, prev2 = [], 0.0, 0.0
+    n_s, n_r = int(swell * SR), int(ring * SR)
+    for i in range(n_s + n_r):
+        x = rng.uniform(-1, 1)
+        hp = x - 2 * prev + prev2
+        prev2, prev = prev, x
+        env = (i / n_s) ** 3 if i < n_s else math.exp(-(i - n_s) / SR * 1.6)
+        out.append(hp * env * 0.5)
+    return out
+
+
+def reverb_once(track, wet=0.4, room=0.85):
+    """Comb reverb for a one-shot piece: the tail rings past the end instead of wrapping."""
+    combs = [int(SR * d) for d in (0.0297, 0.0371, 0.0411, 0.0437)]
+    tail = int(SR * 2.5)
+    src = track + [0.0] * tail
+    bufs = [[0.0] * d for d in combs]
+    idx = [0] * len(combs)
+    out = []
+    for x in src:
+        acc = 0.0
+        for c, size in enumerate(combs):
+            b = bufs[c]
+            y = b[idx[c]]
+            b[idx[c]] = x + y * room
+            idx[c] = (idx[c] + 1) % size
+            acc += y
+        out.append(x + wet * acc / len(combs))
+    return out
+
+
+def degree_note(degree, octave):
+    """Scale degree like 3, or '1+' (an octave up), to (name, octave) in D minor."""
+    shift = 0
+    if isinstance(degree, str):
+        shift = degree.count("+") - degree.count("-")
+        degree = int(degree.strip("+-"))
+    return MINOR[(degree - 1) % 7], octave + shift + (degree - 1) // 7
+
+
+def intro_music():
+    rng = random.Random(77)
+    track = [0.0] * int(INTRO_LENGTH * SR)
+    hit = INTRO_HIT
+
+    # Night air: wind throughout and a low drone gathering underneath.
+    # Hushed at first; when the ember dies the wind drops and the drone falls away.
+    wind(track, rng, 0.035, 0.0, INTRO_FIRE_OUT + 0.5)
+    wind(track, rng, 0.012, INTRO_FIRE_OUT + 0.5, 19.0)
+    wind(track, rng, 0.03, 19.0, INTRO_LENGTH)
+    soft = wavetable(SOFT)
+    synth(track, 0.5, INTRO_FIRE_OUT - 0.5, freq("D", 2), soft, 0.06, attack=5.0, release=2.0)
+    synth(track, 19.0, hit - 19.05, freq("D", 2), soft, 0.08, attack=6.0, release=0.05)
+    synth(track, 21.0, hit - 21.05, freq("A", 2), soft, 0.05, attack=6.0, release=0.05)
+
+    # A lone kantele plays the old runo tune, slow and mournful.
+    beat = 0.72
+    tune = [(1, 1), (1, 1), (2, 1), (3, 1), (3, 1), (4, 1), (3, 1), (2, 1), (1, 2),
+            (3, 1), (4, 1), (5, 2), (4, 1), (3, 1), (2, 1)]
+    t = 2.6
+    for degree, beats in tune:
+        name, octv = degree_note(degree, 4)
+        add_once(track, t + rng.uniform(-0.01, 0.01), pluck(freq(name, octv), 3.0, rng, 0.45, 0.997), 0.17)
+        t += beat * beats
+    # The ember dies: a falling figure, slowing, then a single low string.
+    t = INTRO_FIRE_OUT - 1.4
+    for name, octv, dt in (("A", 4, 0.5), ("G", 4, 0.58), ("F", 4, 0.7), ("E", 4, 0.9), ("D", 4, 1.7)):
+        add_once(track, t, pluck(freq(name, octv), 3.5, rng, 0.4, 0.998), 0.17)
+        t += dt
+    add_once(track, INTRO_FIRE_OUT + 1.6, pluck(freq("D", 2), 5.0, rng, 0.3, 0.9993), 0.25)
+
+    # Tilting up to the sky: a heartbeat drum quickening, a choir rising, the aurora shimmering.
+    drum = frame_drum(rng)
+    t, gap = 19.6, 1.3
+    while t < hit - 0.3:
+        add_once(track, t, drum, 0.2 + 0.5 * ((t - 19.6) / (hit - 19.6)) ** 1.5)
+        t += gap
+        gap = max(0.3, gap * 0.85)
+    for name, octv in (("D", 3), ("F", 3), ("A", 3), ("D", 4)):
+        f = freq(name, octv)
+        synth(track, 20.4, hit - 20.45, f, choir_table(f, rng), 0.06, attack=7.5, release=0.05,
+              vibrato=0.006, vib_rate=4.6 + rng.random(), rng=rng)
+    t = 20.0
+    while t < hit:
+        name, octv = rng.choice([("D", 6), ("F", 6), ("A", 6), ("C", 7), ("E", 6), ("A", 5)])
+        add_once(track, t, bell(rng, freq(name, octv)), 0.03 + 0.05 * (t - 20) / (hit - 20))
+        t += rng.uniform(0.12, 0.45) * (1.5 - (t - 20) / (hit - 20))
+    add_once(track, hit - 3.5, cymbal(rng, 3.5, 4.0), 0.22)
+
+    # The title: drums, the full choir, a horn singing the runo theme, kantele above.
+    add_once(track, hit, frame_drum(rng, 0.75), 1.3)
+    add_once(track, hit + 0.03, drum, 0.8)
+    add_once(track, hit, cymbal(rng, 0.001, 5.0), 0.3)
+    chords = [(hit, 4.2, [("D", 3), ("A", 3), ("D", 4), ("F", 4), ("A", 4)]),
+              (hit + 4.2, 3.0, [("C", 3), ("G", 3), ("C", 4), ("E", 4), ("G", 4)]),
+              (hit + 7.2, 3.0, [("Bb", 2), ("F", 3), ("Bb", 3), ("D", 4), ("F", 4)]),
+              (hit + 10.2, 3.0, [("C", 3), ("G", 3), ("C", 4), ("E", 4), ("G", 4)]),
+              (hit + 13.2, 9.0, [("D", 3), ("A", 3), ("D", 4), ("F", 4), ("A", 4)])]
+    for i, (start, dur, notes) in enumerate(chords):
+        for name, octv in notes:
+            f = freq(name, octv)
+            synth(track, start, dur, f, choir_table(f, rng), 0.085, attack=0.08 if i == 0 else 0.6,
+                  release=4.0 if i == len(chords) - 1 else 0.9, vibrato=0.005, vib_rate=4.4 + rng.random(), rng=rng)
+    synth(track, hit, 20.0, freq("D", 2), wavetable(HORN), 0.16, attack=0.05, release=4.0)
+    horn = wavetable(HORN, rng)
+    theme = [(1, 2), (5, 3), (4, 1), (3, 1), (2, 1), (1, 2),
+             (3, 1), (4, 1), (5, 2), (6, 1), (5, 1), (4, 1), (5, 3),
+             ("1+", 2), (7, 1), (6, 1), (5, 2), (4, 1), (3, 1), (2, 1), (1, 4)]
+    beat, t = 0.6, hit + 0.6
+    for degree, beats in theme:
+        name, octv = degree_note(degree, 3)
+        f = freq(name, octv)
+        synth(track, t, beats * beat * 0.92, f, horn, 0.17, attack=0.09, release=0.35, vibrato=0.004, vib_rate=5.2)
+        add_once(track, t, pluck(freq(name, octv + 2), 2.0, rng, 0.75, 0.996), 0.2)
+        t += beats * beat
+    for bar in range(6):  # steady drums in five: strong on one, lighter on four
+        bt = hit + 3.0 + bar * 3.0
+        add_once(track, bt, drum, 0.6)
+        add_once(track, bt + 1.8, drum, 0.38)
+    t = hit + 1.0
+    while t < hit + 18:
+        name, octv = rng.choice([("D", 6), ("F", 6), ("A", 6), ("E", 6)])
+        add_once(track, t, bell(rng, freq(name, octv)), 0.035)
+        t += rng.uniform(0.6, 1.4)
+    add_once(track, INTRO_LENGTH - 4.5, pluck(freq("D", 5), 4.0, rng, 0.6, 0.998), 0.2)
+    full = reverb_once(track, 0.42, 0.86)
+    write_ogg(full, "music/intro.ogg")
+    # Skipping the intro jumps to the title. The game can't seek inside an OGG file, so the
+    # end of the piece, from just before the hit, is also its own file (at the same loudness).
+    tail = full[int((INTRO_HIT - INTRO_SKIP_LEAD) * SR):]
+    write_ogg(tail, "music/intro_tail.ogg", peak_level=0.9 * max(map(abs, tail)) / max(map(abs, full)))
+
+
+def title_music():
+    """A quiet loop for the title screen: the aurora shimmering over a held chord."""
+    rng = random.Random(78)
+    loop = 24.0
+    track = [0.0] * int(loop * SR)
+    drone(track, freq("D", 2), 0.1)
+    drone(track, freq("A", 2), 0.05)
+    for name, octv in (("D", 3), ("A", 3), ("F", 4)):
+        f = round(freq(name, octv) * loop) / loop  # whole cycles per loop, so it joins seamlessly
+        synth(track, 0, loop, f, choir_table(f, rng, "o"), 0.03, attack=0.001, release=0.0, wrap=True)
+    wind(track, rng, 0.05, wrap_period=loop / 3)
+    t = 0.3
+    while t < loop:
+        name, octv = rng.choice([("D", 6), ("F", 6), ("A", 6), ("E", 6), ("A", 5)])
+        add(track, t, bell(rng, freq(name, octv)), 0.03)
+        t += rng.uniform(0.8, 2.2)
+    write_ogg(reverb(track, 0.5, 0.86), "music/title.ogg", peak_level=0.45)
+
+
 if __name__ == "__main__":
     print("music:")
     village()
     path()
     grove()
     ending()
+    intro_music()
+    title_music()
     print("voices:")
     voices()
