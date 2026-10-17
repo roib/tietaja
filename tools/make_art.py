@@ -1284,16 +1284,7 @@ def sprite(w, h):
     return img, Painter(img)
 
 
-def soften(img, blur=0.8):
-    """Painted softness plus a faint dark rim so figures read against busy backgrounds."""
-    alpha = img.getchannel("A")
-    rim = Image.new("RGBA", img.size, (24, 18, 12, 0))
-    rim.putalpha(alpha.filter(ImageFilter.MaxFilter(3)).point(lambda v: v * 70 // 255))
-    rim.alpha_composite(img.filter(ImageFilter.GaussianBlur(blur)))
-    return rim
-
-
-SUPERSAMPLE = 2
+SUPERSAMPLE = 2  # sprites are painted at twice their size, then shrunk
 
 
 def oil_paint_sprite(img, rng, scale, passes=((0.9, 0), (0.5, 10), (0.28, 18), (0.14, 30))):
@@ -1337,19 +1328,6 @@ def oil_paint_sprite(img, rng, scale, passes=((0.9, 0), (0.5, 10), (0.28, 18), (
     out.putalpha(alpha)
     return out
 
-
-def painted_sprite(draw, path, seed, blur=0.4):
-    """Draw an object at double the output resolution, oil-paint it, then scale it down."""
-    global SCALE
-    base = SCALE
-    SCALE = base * SUPERSAMPLE
-    try:
-        img = draw()
-    finally:
-        SCALE = base
-    img = oil_paint_sprite(img, random.Random(seed), base * SUPERSAMPLE)
-    img = img.resize((img.width // SUPERSAMPLE, img.height // SUPERSAMPLE), Image.LANCZOS)
-    save(soften(img, blur), path)
 
 def curve(p0, p1, p2, n=10):
     """Points along a quadratic curve from p0 to p2, bending toward p1 (room units)."""
@@ -1634,32 +1612,33 @@ def kyllikki():
 
 
 def magpie():
-    """The magpie, facing right, the spindle in its beak: tonal blacks with a blue-green gleam."""
+    """The magpie, perched and facing right with the spindle in its beak: glossy black with
+    a long graduated tail, white shoulder and belly, a white flash along the folded wing,
+    and the blue-green-violet sheen magpies have in sunlight."""
     img, d = sprite(16, 12)
-    tail = [(0.0, 3.4), (5.2, 5.2), (5.0, 7.4), (0.4, 8.4)]
-    tone(img, tail, PLUMAGE, "flat")
-    for k, col in enumerate(((60, 120, 112), (70, 90, 160), (110, 70, 150))):  # the tail's sheen
-        stroke(d, [(0.5 + k * 0.3, 4.4 + k * 0.9), (5.0, 5.8 + k * 0.4)], col, 0.3, 170)
-    tone(img, oval(7.2, 6.3, 4.2, 3.2), PLUMAGE, "sphere")
-    tone(img, [(4.8, 4.6), (9.6, 4.2), (10.2, 6.6), (5.8, 8.2)], PLUMAGE, "flat", light=0.06)
-    for k in range(4):  # blue-green gleam along the wing
-        stroke(d, [(5.4 + k * 1.0, 6.8 - k * 0.3), (4.6 + k * 1.0, 8.0 - k * 0.25)], (70, 130, 150), 0.18, 180)
-    tone(img, oval(6.2, 5.3, 1.8, 1.1), WHITE_FEATHER, "sphere")  # shoulder patch
-    tone(img, oval(7.9, 7.8, 2.3, 1.6), WHITE_FEATHER, "sphere", light=-0.05)  # belly
-    tone(img, oval(11.25, 3.4, 2.45, 2.5), PLUMAGE, "sphere", light=0.05)
-    touch(d, 11.7, 2.8, 0.42, 0.42, (28, 22, 20))
-    touch(d, 11.55, 2.65, 0.14, 0.14, (240, 240, 236))  # the bright eye
-    d.polygon(pts([(13.3, 3.1), (15.5, 3.8), (13.3, 4.5)]), fill=(24, 24, 28, 255))
-    stroke(d, [(12.9, 4.9), (16.0, 2.1)], JUNIPER[2], 0.42)  # the spindle
-    touch(d, 15.1, 3.0, 0.7, 0.7, LINEN[2])  # wool on the whorl
-    for x in (6.6, 8.6):
-        stroke(d, [(x, 9.3), (x - 0.2, 11.6)], (44, 44, 48), 0.3)
-        stroke(d, [(x - 0.9, 11.8), (x + 0.7, 11.8)], (44, 44, 48), 0.25)
+    tail = [(5.4, 6.0), (6.0, 8.0), (0.2, 11.2), (0.0, 9.8)]
+    tone(img, tail, PLUMAGE, "flat", light=0.04)
+    for k, col in enumerate(((52, 120, 104), (64, 92, 160), (112, 70, 150))):  # the tail's sheen
+        stroke(d, [(5.2, 6.6 + k * 0.4), (0.6, 10.0 + k * 0.4)], col, 0.28, 150)
+    tone(img, oval(8.0, 6.2, 3.7, 2.6), PLUMAGE, "sphere")
+    tone(img, oval(8.7, 7.7, 2.3, 1.5), WHITE_FEATHER, "sphere", light=-0.08)  # belly
+    tone(img, [(5.4, 4.6), (10.2, 4.2), (10.5, 6.6), (6.2, 8.3)], PLUMAGE, "flat", light=0.08)  # folded wing
+    for k in range(4):  # blue gloss along the wing coverts
+        stroke(d, [(6.2 + k * 1.0, 5.2 + k * 0.1), (5.8 + k * 1.0, 6.6 + k * 0.1)], (66, 110, 156), 0.18, 170)
+    stroke(d, [(6.4, 7.9), (9.8, 6.7)], WHITE_FEATHER[2], 0.4, 230)  # the white wing-flash
+    tone(img, oval(6.5, 5.0, 1.7, 0.95), WHITE_FEATHER, "sphere")  # shoulder patch
+    tone(img, oval(11.8, 3.6, 2.15, 2.05), PLUMAGE, "sphere", light=0.04)  # head
+    stroke(d, curve((10.3, 2.4), (11.6, 1.6), (13.0, 2.2), 6), (72, 92, 140), 0.22, 170)  # gloss on the crown
+    touch(d, 12.5, 3.2, 0.38, 0.38, (24, 18, 16))
+    touch(d, 12.38, 3.06, 0.12, 0.12, (240, 238, 232))  # the bright eye
+    d.polygon(pts([(13.6, 3.3), (15.5, 3.9), (13.6, 4.5)]), fill=(22, 22, 26, 255))
+    stroke(d, [(13.2, 4.8), (16.0, 2.0)], JUNIPER[1], 0.42)  # the spindle, crosswise in the beak
+    tone(img, oval(15.1, 2.9, 0.8, 0.6), LINEN, "sphere")  # wool on the whorl
+    stroke(d, curve((15.5, 3.3), (16.0, 4.4), (15.6, 5.8), 5), LINEN[1], 0.14, 200)  # a strand trailing
+    for x in (7.2, 9.0):  # legs gripping the branch
+        stroke(d, [(x, 8.6), (x - 0.25, 11.5)], (40, 40, 44), 0.3)
+        stroke(d, [(x - 0.9, 11.7), (x + 0.7, 11.7)], (40, 40, 44), 0.25)
     return img
-
-
-FIGURE_BRUSHES = ((1.0, 0), (0.6, 8), (0.35, 16), (0.2, 26))
-
 
 def rim_light(img, sun=(255, 226, 170), strength=150):
     """Sunlight catching the left edges of a figure."""
@@ -1674,10 +1653,14 @@ def rim_light(img, sun=(255, 226, 170), strength=150):
     return img
 
 
-def painted_figure(draw, path, seed, detail=2):
-    """Paint a figure at twice the output size with brushwork as coarse as the backgrounds',
-    then shrink it. Soft edges, no outline, and the sun's rim on its left side. The game
-    tints figures with each room's light."""
+FIGURE_BRUSHES = ((1.0, 0), (0.6, 8), (0.35, 16), (0.2, 26))
+SMALL_BRUSHES = ((0.4, 0), (0.25, 8), (0.14, 16), (0.08, 26))  # for small objects
+
+
+def painted_figure(draw, path, seed, detail=2, brushes=FIGURE_BRUSHES, rim=True):
+    """Paint a figure or object at twice the output size with oil brushwork, then shrink
+    it. Soft edges, no outline, and (unless it makes its own light) the sun's rim on its
+    left side. The game tints sprites with each room's light."""
     global SCALE
     base = SCALE
     SCALE = base * detail * SUPERSAMPLE
@@ -1685,78 +1668,151 @@ def painted_figure(draw, path, seed, detail=2):
         img = draw()
     finally:
         SCALE = base
-    img = oil_paint_sprite(img, random.Random(seed), base * detail * SUPERSAMPLE, FIGURE_BRUSHES)
+    img = oil_paint_sprite(img, random.Random(seed), base * detail * SUPERSAMPLE, brushes)
     img = img.resize((img.width // SUPERSAMPLE, img.height // SUPERSAMPLE), Image.LANCZOS)
     img.putalpha(img.getchannel("A").filter(ImageFilter.GaussianBlur(0.8)))  # edges melt a little
-    save(rim_light(img), path)
+    save(rim_light(img) if rim else img, path)
+
+
+BONE = ((112, 100, 82), (196, 182, 152), (244, 236, 212))
+RYE = ((48, 32, 26), (100, 68, 48), (158, 116, 80))
+BRONZE = ((84, 50, 22), (166, 108, 50), (240, 196, 120))
+FUNGUS = ((66, 60, 56), (128, 122, 112), (198, 192, 178))
+FIRE_FRAMES = 6
 
 
 def skull():
+    """A bear's skull hung on the pine, in profile: the long snout, the deep eye socket,
+    heavy canines and the separate lower jaw, weathered grey-white, tied up with birch bark
+    so the bear's spirit can find its way home."""
     img, d = sprite(14, 12)
-    d.line([(s(7), 0), (s(7), s(2))], fill=(90, 70, 50, 255), width=2)
-    d.ellipse([s(1), s(1), s(13), s(9.6)], fill=(222, 212, 190, 255))
-    d.ellipse([s(8), s(1.4), s(13), s(9.4)], fill=(150, 140, 120, 140))
-    d.rectangle([s(3.4), s(7), s(10.6), s(11.4)], fill=(206, 196, 174, 255))
-    d.ellipse([s(3), s(3.4), s(5.8), s(6.2)], fill=(36, 30, 26, 255))
-    d.ellipse([s(8.2), s(3.4), s(11), s(6.2)], fill=(36, 30, 26, 255))
-    for x in (s(4.6), s(6.4), s(8.2)):
-        d.line([(x, s(9)), (x, s(11.4))], fill=(60, 50, 40, 255), width=2)
+    stroke(d, [(5.6, 0.0), (5.8, 2.4)], JUNIPER[1], 0.45)
+    touch(d, 5.8, 2.2, 0.6, 0.35, JUNIPER[0])  # the knot
+    tone(img, oval(5.0, 5.0, 4.0, 3.1), BONE, "sphere")  # braincase
+    tone(img, [(7.6, 3.3), (12.4, 4.5), (13.7, 5.6), (13.5, 7.5), (8.0, 8.0)], BONE, "cylinder", light=0.05)  # snout
+    stroke(d, curve((1.6, 3.6), (4.6, 1.7), (8.6, 3.0), 8), BONE[0], 0.3, 120)  # the crest along the top
+    tone(img, oval(8.4, 4.8, 1.05, 0.95), ((24, 20, 18), (52, 44, 38), (90, 80, 68)), "sphere", light=-0.2)  # eye socket
+    touch(d, 13.3, 6.1, 0.42, 0.6, (34, 28, 24))  # nasal opening
+    stroke(d, [(5.6, 6.6), (9.4, 6.4)], BONE[0], 0.4, 150)  # the cheekbone's shadow
+    for x in (8.8, 9.6, 10.4, 12.2, 12.9):  # small teeth
+        touch(d, x, 8.05, 0.24, 0.32, BONE[2], 230)
+    d.polygon(pts([(11.0, 7.8), (11.6, 7.8), (11.25, 9.6)]), fill=BONE[2] + (255,))  # upper canine
+    tone(img, [(3.0, 8.7), (12.6, 8.5), (12.8, 9.6), (4.0, 10.6), (2.6, 9.7)], BONE, "cylinder", light=-0.12)  # jaw
+    d.polygon(pts([(11.6, 8.6), (12.1, 8.6), (11.9, 7.2)]), fill=BONE[2] + (255,))  # lower canine
+    for start, end in (((3.0, 3.6), (4.2, 5.0)), ((5.4, 2.6), (5.0, 4.0))):  # weathering cracks
+        stroke(d, [start, end], BONE[0], 0.12, 170)
+    for x in (2.4, 3.4, 4.6):  # a little moss
+        touch(d, x, 7.6, 0.4, 0.25, (92, 108, 52), 200)
     return img
 
 
 def bread(w, h):
+    """Reikäleipä: Kyllikki's flat round rye loaf with a hole in the middle, dark-crusted
+    and dusted with flour, seen a little from above."""
     img, d = sprite(w, h)
-    d.ellipse([s(w * 0.06), s(h * 0.18), s(w * 0.94), s(h * 0.95)], fill=(96, 60, 34, 255))
-    d.ellipse([s(w * 0.12), s(h * 0.22), s(w * 0.6), s(h * 0.62)], fill=(150, 104, 62, 200))
-    for i in range(3):
-        x = s(w * (0.3 + 0.18 * i))
-        d.arc([x - s(w * 0.08), s(h * 0.35), x + s(w * 0.08), s(h * 0.6)], 200, 340, fill=(64, 38, 22, 255), width=2)
-    return soften(img, 0.6)
+    rng = random.Random(41)
+    cx, cy, rx, ry = w / 2, h * 0.5, w * 0.46, h * 0.38
+    tone(img, oval(cx, cy + ry * 0.2, rx, ry), RYE, "sphere", light=-0.25)  # the crust's edge
+    tone(img, oval(cx, cy, rx * 0.97, ry * 0.88), RYE, "sphere", light=0.06)  # the top
+    for _ in range(int(w * 6)):  # flour dusting
+        a, r = rng.uniform(0, 6.28), math.sqrt(rng.random()) * 0.85
+        touch(d, cx + math.cos(a) * rx * r, cy + math.sin(a) * ry * 0.85 * r, 0.12, 0.08, (226, 212, 184), rng.randint(60, 140))
+    for ring in (0.45, 0.72):  # docking marks pricked in rings
+        for k in range(10):
+            a = k * 0.628 + ring
+            touch(d, cx + math.cos(a) * rx * ring, cy + math.sin(a) * ry * 0.85 * ring, 0.1, 0.07, RYE[0], 200)
+    hole = oval(cx, cy, rx * 0.2, ry * 0.24)
+    tone(img, hole, ((40, 28, 20), (86, 64, 44), (150, 116, 78)), "flat", light=-0.1)  # the hole, showing what's below
+    stroke(d, hole[16:24], RYE[0], 0.12 + 0.02 * h, 220)  # its shadowed inner edge
+    return img
 
 
 def button(w, h):
+    """An old bronze coat button: domed, aged a little toward green at the edges, with a
+    raised rim and a sun of rays embossed in it (each ray lit on one side, shaded on the
+    other, like struck metal), and a sharp glint where it catches the light."""
     img, d = sprite(w, h)
-    d.ellipse([s(w * 0.1), s(h * 0.1), s(w * 0.9), s(h * 0.9)], fill=(160, 104, 44, 255))
-    d.ellipse([s(w * 0.2), s(h * 0.2), s(w * 0.8), s(h * 0.8)], fill=(214, 160, 80, 255))
-    d.ellipse([s(w * 0.26), s(h * 0.24), s(w * 0.5), s(h * 0.44)], fill=(255, 236, 180, 220))
-    for x in (0.42, 0.6):
-        d.ellipse([s(w * x), s(h * 0.5), s(w * (x + 0.1)), s(h * 0.6)], fill=(90, 56, 24, 255))
-    return soften(img, 0.4)
-
+    cx, cy, r = w / 2, h / 2, min(w, h) * 0.42
+    tone(img, oval(cx, cy, r, r), BRONZE, "sphere")
+    edge = oval(cx, cy, r * 0.96, r * 0.96, 24)
+    stroke(d, edge + edge[:1], (96, 98, 62), r * 0.12, 150)  # patina creeping in at the edge
+    rim = oval(cx, cy, r * 0.8, r * 0.8, 24)
+    stroke(d, rim[12:21], BRONZE[0], r * 0.09, 220)  # the raised rim: shaded below right...
+    stroke(d, rim[0:4] + rim[20:24], BRONZE[2], r * 0.07, 220)  # ...and lit above left
+    for k in range(8):  # the embossed sun: rays struck into the metal
+        ang = k * math.pi / 4
+        x0, y0 = cx + math.cos(ang) * r * 0.22, cy + math.sin(ang) * r * 0.22
+        x1, y1 = cx + math.cos(ang) * r * 0.62, cy + math.sin(ang) * r * 0.62
+        off = r * 0.05
+        stroke(d, [(x0 - off, y0 - off), (x1 - off, y1 - off)], BRONZE[2], r * 0.06, 200)
+        stroke(d, [(x0 + off, y0 + off), (x1 + off, y1 + off)], BRONZE[0], r * 0.06, 200)
+    tone(img, oval(cx, cy, r * 0.18, r * 0.18), BRONZE, "sphere", light=0.1)  # the boss in the middle
+    touch(d, cx - r * 0.4, cy - r * 0.48, r * 0.16, r * 0.09, (255, 252, 236), 255, -0.6)  # the glint
+    touch(d, cx - r * 0.25, cy - r * 0.6, r * 0.06, r * 0.05, (255, 255, 255), 255)
+    return img
 
 def tinder(w, h):
+    """Hoof fungus: a bracket shaped like a hoof, banded grey on top, with a cream rim of
+    pores underneath."""
     img, d = sprite(w, h)
-    d.pieslice([s(w * 0.04), s(-h * 0.2), s(w * 0.96), s(h * 1.4)], 0, 180, fill=(124, 104, 82, 255))
-    for i, col in enumerate([(160, 140, 112), (102, 86, 68), (140, 120, 96)]):
-        f = 0.3 + 0.22 * i
-        d.arc([s(w * 0.04 + w * 0.06 * i), s(-h * 0.2 + h * f), s(w * 0.96 - w * 0.06 * i), s(h * 1.4 - h * 0.1 * i)],
-              10, 170, fill=col + (255,), width=round(s(0.5)))
-    return soften(img, 0.5)
+    top, base = 0.1 * h, 0.82 * h
+    dome = curve((0.04 * w, base * 0.95), (0.5 * w, top - 0.35 * h), (0.96 * w, base * 0.95), 16)
+    tone(img, dome + [(0.9 * w, base), (0.1 * w, base)], FUNGUS, "sphere", light=0.04)
+    for k in range(1, 5):  # growth bands
+        f = k / 5
+        band = curve((0.06 * w + f * 0.03 * w, base * 0.95), (0.5 * w, top - 0.35 * h + f * 0.85 * h),
+                     (0.94 * w - f * 0.03 * w, base * 0.95), 12)
+        stroke(d, band, FUNGUS[0] if k % 2 else FUNGUS[2], 0.025 * w + 0.08, 150)
+    tone(img, [(0.1 * w, base), (0.9 * w, base), (0.86 * w, 0.96 * h), (0.14 * w, 0.96 * h)],
+         ((128, 104, 72), (188, 164, 120), (228, 212, 176)), "flat")  # the pore surface underneath
+    for x in (0.25, 0.7):  # a little moss where it meets the bark
+        touch(d, x * w, base * 0.9, 0.05 * w, 0.04 * w, (96, 112, 54), 170)
+    return img
 
 
-def spindle(w, h):
-    img, d = sprite(w, h)
-    d.line([(s(w * 0.12), s(h * 0.88)), (s(w * 0.88), s(h * 0.12))], fill=(176, 140, 92, 255), width=round(s(1)))
-    d.ellipse([s(w * 0.5), s(h * 0.24), s(w * 0.78), s(h * 0.52)], fill=(120, 82, 52, 255))
-    d.ellipse([s(w * 0.2), s(h * 0.4), s(w * 0.56), s(h * 0.76)], fill=(236, 230, 214, 255))
-    return soften(img, 0.6)
+def spindle():
+    """The drop spindle: a juniper shaft, a turned whorl, and a cop of spun wool."""
+    img, d = sprite(16, 16)
+    stroke(d, [(3.0, 14.4), (13.2, 1.6)], JUNIPER[0], 0.7)
+    stroke(d, [(2.8, 14.2), (13.0, 1.4)], JUNIPER[2], 0.25, 220)
+    touch(d, 4.6, 12.3, 1.9, 0.95, JUNIPER[0], 255, -0.88)  # the whorl
+    touch(d, 4.4, 12.1, 1.5, 0.6, JUNIPER[1], 255, -0.88)
+    tone(img, [(6.4, 9.6), (8.2, 6.0), (10.4, 4.6), (11.0, 5.6), (9.0, 9.0), (7.2, 10.6)], LINEN, "sphere")  # the cop
+    for k in range(5):  # wraps of yarn
+        stroke(d, [(7.0 + k * 0.8, 9.6 - k * 0.9), (8.2 + k * 0.6, 10.0 - k * 1.0)], LINEN[0], 0.12, 150)
+    stroke(d, curve((10.8, 5.4), (14.4, 7.0), (14.8, 12.6), 8), LINEN[1], 0.16, 230)  # the yarn running off
+    return img
 
 
-def fire():
+def fire(frame):
+    """The fire, born again: tongues of flame over two charred logs with glowing ends.
+    The six frames loop smoothly, each tongue swaying and rising on its own rhythm."""
     img, d = sprite(30, 22)
-    glow = Image.new("RGBA", img.size, (0, 0, 0, 0))
-    ImageDraw.Draw(glow).ellipse([s(1), s(8), s(29), s(24)], fill=(255, 150, 60, 110))
-    img.alpha_composite(glow.filter(ImageFilter.GaussianBlur(s(2))))
-    rng = random.Random(7)
-    for color, scale_ in (((214, 70, 24), 1.0), ((246, 150, 44), 0.75), ((255, 230, 150), 0.45)):
-        lay = Image.new("RGBA", img.size, (0, 0, 0, 0))
-        ld = ImageDraw.Draw(lay, "RGBA")
-        for _ in range(9):
-            cx = s(15) + rng.gauss(0, s(4) * scale_)
-            hgt = s(rng.uniform(10, 20)) * scale_
-            wid = s(rng.uniform(2, 4)) * scale_
-            ld.polygon([(cx - wid, s(22)), (cx + rng.uniform(-s(1), s(1)), s(22) - hgt), (cx + wid, s(22))], fill=color + (230,))
-        img.alpha_composite(lay.filter(ImageFilter.GaussianBlur(2)))
+    phase = frame / FIRE_FRAMES * 2 * math.pi
+    glow = Image.new("RGBA", img.size)
+    ImageDraw.Draw(glow).ellipse(pts([(3, 15.5), (27, 23)]), fill=(255, 132, 48, 140))
+    img.alpha_composite(glow.filter(ImageFilter.GaussianBlur(s(1.5))))
+    for (x0, y0), (x1, y1) in (((7.5, 20.8), (22.5, 18.4)), ((8.5, 18.2), (22.0, 21.2))):  # logs
+        stroke(d, [(x0, y0), (x1, y1)], (36, 24, 20), 1.5)
+        stroke(d, [(x0, y0 - 0.4), (x1, y1 - 0.4)], (70, 44, 32), 0.4, 200)
+        for x, y in ((x0, y0), (x1, y1)):  # glowing ends
+            touch(d, x, y, 0.8, 0.7, (255, 120, 40))
+    for k in range(9):  # embers along the logs
+        touch(d, 9.5 + k * 1.4, 19.6 + math.sin(k * 2.1) * 0.6, 0.35, 0.25, (255, 164, 70), 220)
+    flames = Image.new("RGBA", img.size)
+    fd = Painter(flames)
+    base = 19.6
+    for layer, (col, size) in enumerate((((214, 70, 30), 1.0), ((250, 146, 48), 0.72), ((255, 230, 160), 0.42))):
+        for k in range(7):
+            centre = 1 - abs(k - 3) / 4  # tallest in the middle
+            h = (5.0 + 9.0 * centre) * (0.78 + 0.16 * math.sin(phase + k * 1.9) + 0.08 * math.sin(2 * phase + k * 0.7)) * size
+            sway = 0.9 * math.sin(phase + k * 1.3) + 0.3 * math.sin(2 * phase + k)
+            x = 9.6 + k * 1.8
+            w = (1.4 + 0.6 * centre) * size
+            left = curve((x - w, base), (x - w * 0.9 + sway * 0.3, base - h * 0.5), (x + sway, base - h), 8)
+            right = curve((x + sway, base - h), (x + w * 0.8 + sway * 0.6, base - h * 0.45), (x + w, base), 8)
+            fd.polygon(pts(left + right), fill=col + (235 if layer < 2 else 255,))
+    img.alpha_composite(flames.filter(ImageFilter.GaussianBlur(s(0.25))))
     return img
 
 
@@ -1782,13 +1838,18 @@ def effect_sprites():
     save(soft_dot(32, (255, 240, 200), 1.6), "effects/mote.png")
     smoke = soft_dot(128, (118, 112, 108), 1.3).filter(ImageFilter.GaussianBlur(4))  # woodsmoke shows against white cloud
     save(smoke, "effects/smoke.png")
-    for frame, lift in ((0, -1.0), (1, 0.6)):  # a distant bird, wings up and down
-        img = Image.new("RGBA", (48, 24))
+    for frame, lift in ((0, -1.0), (1, 0.7)):  # a distant swift: sickle wings, up and down
+        img = Image.new("RGBA", (96, 48))
         d = ImageDraw.Draw(img)
-        d.line([(2, 12 + 8 * lift), (14, 12 + 3 * lift), (24, 14), (34, 12 + 3 * lift), (46, 12 + 8 * lift)],
-               fill=(36, 36, 44, 255), width=4, joint="curve")
-        d.ellipse([20, 11, 28, 17], fill=(36, 36, 44, 255))
-        save(img, f"effects/bird_{frame}.png")
+        for side in (-1, 1):
+            tip = (48 + side * 46, 24 + 16 * lift)
+            front = curve((48 + side * 4, 22), (48 + side * 26, 14 + 10 * lift), tip, 10)
+            back = curve(tip, (48 + side * 22, 22 + 8 * lift), (48 + side * 4, 27), 10)
+            d.polygon(front + back, fill=(42, 40, 52, 255))
+        d.ellipse([41, 19, 55, 29], fill=(42, 40, 52, 255))
+        d.polygon([(44, 27), (48, 36), (52, 27)], fill=(42, 40, 52, 255))  # forked tail
+        save(img.filter(ImageFilter.GaussianBlur(0.8)).resize((48, 24), Image.LANCZOS), f"effects/bird_{frame}.png")
+    save(soft_dot(32, (255, 255, 255), 1.2), "effects/spark.png")  # tinted to embers by the game
     img = Image.new("RGBA", (32, 24))  # a yellowing birch leaf
     d = ImageDraw.Draw(img)
     d.polygon([(2, 12), (12, 3), (26, 6), (30, 12), (26, 18), (12, 21)], fill=(196, 188, 70, 255))
@@ -1797,15 +1858,15 @@ def effect_sprites():
 
 
 def items():
-    save(bread(16, 16), "items/bread.png")
-    save(button(16, 16), "items/button.png")
-    save(spindle(16, 16), "items/spindle.png")
-    save(tinder(16, 12).crop((0, 0, s(16), s(12))).resize((s(16), s(16))), "items/tinder.png")
-    save(bread(14, 8), "objects/bread.png")
-    save(button(6, 6), "objects/button.png")
-    save(tinder(14, 8), "objects/tinder.png")
-    save(fire(), "objects/fire.png")
-
+    painted_figure(lambda: bread(16, 16), "items/bread.png", 31, brushes=SMALL_BRUSHES)
+    painted_figure(lambda: button(16, 16), "items/button.png", 32, brushes=SMALL_BRUSHES)
+    painted_figure(spindle, "items/spindle.png", 33, brushes=SMALL_BRUSHES)
+    painted_figure(lambda: tinder(16, 16), "items/tinder.png", 34, brushes=SMALL_BRUSHES)
+    painted_figure(lambda: bread(14, 8), "objects/bread.png", 35, brushes=SMALL_BRUSHES)
+    painted_figure(lambda: button(6, 6), "objects/button.png", 36, brushes=SMALL_BRUSHES)
+    painted_figure(lambda: tinder(14, 8), "objects/tinder.png", 37, brushes=SMALL_BRUSHES)
+    for frame in range(FIRE_FRAMES):
+        painted_figure(lambda: fire(frame), f"objects/fire_{frame}.png", 40 + frame, brushes=SMALL_BRUSHES, rim=False)
 
 if __name__ == "__main__":
     village()
@@ -1815,9 +1876,9 @@ if __name__ == "__main__":
     for frame in range(4):
         painted_figure(lambda: vilja_walking(frame), f"chars/vilja_walk_{frame}.png", 15 + frame)
     painted_figure(kyllikki, "chars/kyllikki.png", 12)
-    painted_figure(magpie, "chars/magpie.png", 13)
+    painted_figure(magpie, "chars/magpie.png", 13, brushes=SMALL_BRUSHES)
     effect_sprites()
-    painted_sprite(skull, "objects/skull.png", 14, 0.3)
+    painted_figure(skull, "objects/skull.png", 14, brushes=SMALL_BRUSHES)
     shadow_sprite()
     items()
     intro_night()

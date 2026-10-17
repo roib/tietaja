@@ -58,6 +58,9 @@ pub struct Hotspot {
     pub name: String,
     pub rect: Rect,
     pub sprite: Option<String>,
+    /// An animated sprite: (frame count, frames per second). Its path has `{}` where the
+    /// frame number goes.
+    pub frames: Option<(u32, f32)>,
     pub conds: Vec<Cond>,
     /// Exits lead to (room, x) instead of running interaction nodes.
     pub exit: Option<(String, f32)>,
@@ -71,6 +74,7 @@ pub enum EffectKind {
     Motes,
     Leaves,
     Smoke,
+    Sparks,
     Glow,
 }
 
@@ -82,6 +86,7 @@ impl EffectKind {
             "motes" => Self::Motes,
             "leaves" => Self::Leaves,
             "smoke" => Self::Smoke,
+            "sparks" => Self::Sparks,
             "glow" => Self::Glow,
             _ => return None,
         })
@@ -112,6 +117,17 @@ pub struct Room {
     pub light: [u8; 3],
     pub effects: Vec<Effect>,
     pub hotspots: Vec<Hotspot>,
+}
+
+impl Hotspot {
+    /// The image files of the hotspot's sprite: one, or each frame of an animation.
+    pub fn sprite_frames(&self) -> Vec<String> {
+        match (&self.sprite, self.frames) {
+            (Some(path), Some((count, _))) => (0..count).map(|i| path.replace("{}", &i.to_string())).collect(),
+            (Some(path), None) => vec![path.clone()],
+            (None, _) => Vec::new(),
+        }
+    }
 }
 
 impl Room {
@@ -427,7 +443,7 @@ fn parse_room_line(room: &mut Room, line: &str) -> Result<(), String> {
             let usage = "expected `effect <kind>: x y w h [| count N] [| if <conditions>]`";
             let (kind, rest) = rest.split_once(':').ok_or(usage)?;
             let kind = EffectKind::parse(kind.trim()).ok_or_else(|| {
-                format!("unknown effect `{}` (try birds, sparkles, motes, leaves, smoke, glow)", kind.trim())
+                format!("unknown effect `{}` (try birds, sparkles, motes, leaves, smoke, sparks, glow)", kind.trim())
             })?;
             let mut fields = rest.split('|').map(str::trim);
             let nums: Vec<f32> = fields.next().unwrap_or_default().split_whitespace().map(parse_num).collect::<Result<_, _>>()?;
@@ -467,6 +483,7 @@ fn parse_room_line(room: &mut Room, line: &str) -> Result<(), String> {
                 name,
                 rect: Rect { x, y, w, h },
                 sprite: None,
+                frames: None,
                 conds: Vec::new(),
                 exit: None,
             };
@@ -474,6 +491,10 @@ fn parse_room_line(room: &mut Room, line: &str) -> Result<(), String> {
                 let (opt, value) = field.split_once(' ').ok_or("expected `sprite`, `if` or `to`")?;
                 match opt {
                     "sprite" => hotspot.sprite = Some(value.trim().to_string()),
+                    "frames" => {
+                        let (count, fps) = value.trim().split_once(' ').ok_or("expected `frames <count> <per second>`")?;
+                        hotspot.frames = Some((parse_num(count)? as u32, parse_num(fps)?));
+                    }
                     "if" => hotspot.conds = parse_conds(value),
                     "to" => {
                         let (to, x) = value.trim().split_once(' ').ok_or("expected `to <room> <x>`")?;
@@ -481,6 +502,10 @@ fn parse_room_line(room: &mut Room, line: &str) -> Result<(), String> {
                     }
                     _ => return Err(format!("unknown hotspot option `{opt}`")),
                 }
+            }
+            let numbered = hotspot.sprite.as_deref().is_some_and(|s| s.contains("{}"));
+            if numbered != hotspot.frames.is_some() {
+                return Err("an animated sprite needs both `{}` in its path and `| frames <count> <per second>`".into());
             }
             if key == "exit" && hotspot.exit.is_none() {
                 return Err("exits need `| to <room> <x>`".into());
@@ -694,7 +719,7 @@ mod tests {
             paths.push(room.background.clone());
             paths.extend(room.sky.clone());
             paths.extend(room.music.clone());
-            paths.extend(room.hotspots.iter().filter_map(|h| h.sprite.clone()));
+            paths.extend(room.hotspots.iter().flat_map(|h| h.sprite_frames()));
         }
         paths.extend(story.ending_music.clone());
         paths.extend(story.items.iter().map(|i| i.icon.clone()));
@@ -734,12 +759,13 @@ mod tests {
                 }
             }
             for h in &room.hotspots {
-                let Some(sprite) = &h.sprite else { continue };
                 let at = |k: f32| ((h.rect.w * ART_SCALE * k) as u32, (h.rect.h * ART_SCALE * k) as u32);
                 let (expected, detailed) = (at(1.0), at(2.0));
-                let actual = png_size(&root.join(sprite));
-                if actual != expected && actual != detailed {
-                    wrong.push(format!("{sprite} (hotspot {}): {actual:?}, expected {expected:?}", h.id));
+                for sprite in h.sprite_frames() {
+                    let actual = png_size(&root.join(&sprite));
+                    if actual != expected && actual != detailed {
+                        wrong.push(format!("{sprite} (hotspot {}): {actual:?}, expected {expected:?}", h.id));
+                    }
                 }
             }
         }
@@ -755,6 +781,15 @@ mod tests {
         assert_eq!(effects[1].conds, parse_conds("fire_lit"));
         let err = Story::parse("start: a 10\nroom a: A\n  effect fireworks: 1 2 3 4\n").unwrap_err();
         assert!(err.contains("unknown effect `fireworks`"), "{err}");
+    }
+
+    #[test]
+    fn animated_sprites_need_frames_and_a_numbered_path() {
+        let ok = "start: a 10\nroom a: A\n  hotspot f: F | 1 2 3 4 | sprite fire_{}.png | frames 3 10\n";
+        let story = Story::parse(ok).unwrap();
+        assert_eq!(story.room("a").hotspots[0].sprite_frames(), ["fire_0.png", "fire_1.png", "fire_2.png"]);
+        let missing = Story::parse("start: a 10\nroom a: A\n  hotspot f: F | 1 2 3 4 | sprite fire_{}.png\n");
+        assert!(missing.unwrap_err().contains("animated sprite"));
     }
 
     #[test]

@@ -16,7 +16,7 @@ impl Plugin for SceneryPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, load_effect_art).add_systems(
             Update,
-            (sync_scenery.run_if(resource_changed::<Game>), (drift_sky, breathe, animate_effects)).chain(),
+            (sync_scenery.run_if(resource_changed::<Game>), (drift_sky, breathe, animate_sprites, animate_effects)).chain(),
         );
     }
 }
@@ -32,6 +32,13 @@ struct HotspotSprite;
 #[derive(Component)]
 struct SkyLayer {
     copy: f32,
+}
+
+/// A hotspot sprite that plays through its frames.
+#[derive(Component)]
+struct Animated {
+    frames: Vec<Handle<Image>>,
+    fps: f32,
 }
 
 #[derive(Component)]
@@ -65,6 +72,7 @@ struct EffectArt {
     sparkle: Handle<Image>,
     mote: Handle<Image>,
     smoke: Handle<Image>,
+    spark: Handle<Image>,
     leaf: Handle<Image>,
     glow: Handle<Image>,
     bird: [Handle<Image>; 2],
@@ -118,7 +126,8 @@ fn sync_scenery(
     }
 
     for hotspot in room.hotspots.iter().filter(|h| game.0.check(&h.conds)) {
-        let Some(sprite) = &hotspot.sprite else {
+        let frames: Vec<Handle<Image>> = hotspot.sprite_frames().into_iter().map(|path| assets.load(path)).collect();
+        let Some(first) = frames.first().cloned() else {
             continue;
         };
         let r = hotspot.rect;
@@ -128,13 +137,16 @@ fn sync_scenery(
             Sprite {
                 custom_size: Some(Vec2::new(r.w, r.h)),
                 color: Color::srgb_u8(lr, lg, lb), // in the room's light
-                ..Sprite::from_image(assets.load(sprite.clone()))
+                ..Sprite::from_image(first)
             },
             Anchor::BOTTOM_CENTER,
             Transform::from_translation(feet),
             HotspotSprite,
             RoomEntity,
         ));
+        if let Some((_, fps)) = hotspot.frames {
+            entity.insert(Animated { frames, fps });
+        }
         // Characters (hotspots named after someone who speaks) breathe gently.
         if story.0.characters.keys().any(|name| name.eq_ignore_ascii_case(&hotspot.id)) {
             entity.insert(Breathing { base: feet, phase: next_random(&mut rng) * 6.28 });
@@ -160,6 +172,7 @@ fn load_effect_art(mut commands: Commands, assets: Res<AssetServer>) {
             sparkle: assets.load("effects/sparkle.png"),
             mote: assets.load("effects/mote.png"),
             smoke: assets.load("effects/smoke.png"),
+        spark: assets.load("effects/spark.png"),
             leaf: assets.load("effects/leaf.png"),
             glow: assets.load("intro/ember.png"),
             bird: [assets.load("effects/bird_0.png"), assets.load("effects/bird_1.png")],
@@ -172,6 +185,7 @@ impl EffectArt {
             EffectKind::Sparkles => self.sparkle.clone(),
             EffectKind::Motes => self.mote.clone(),
             EffectKind::Smoke => self.smoke.clone(),
+            EffectKind::Sparks => self.spark.clone(),
             EffectKind::Leaves => self.leaf.clone(),
             EffectKind::Glow => self.glow.clone(),
             EffectKind::Birds => self.bird[0].clone(),
@@ -185,6 +199,7 @@ fn look(kind: EffectKind, rect: RoomRect) -> (Vec2, f32) {
         EffectKind::Sparkles => (Vec2::splat(3.0), 0.5),
         EffectKind::Motes => (Vec2::splat(1.6), 2.5),
         EffectKind::Smoke => (Vec2::splat(5.0), 0.6),
+        EffectKind::Sparks => (Vec2::splat(1.1), 1.25),
         EffectKind::Leaves => (Vec2::new(2.6, 2.0), 2.4),
         EffectKind::Glow => (Vec2::new(rect.w, rect.h) * 1.5, 1.2),
         EffectKind::Birds => (Vec2::new(5.0, 2.5), -0.5),
@@ -208,8 +223,12 @@ fn spawn_effect(commands: &mut Commands, art: &EffectArt, index: usize, effect: 
     for i in 0..effect.count.max(1) {
         let r = effect.rect;
         let pos = Vec2::new(r.x + next_random(rng) * r.w, r.y + next_random(rng) * r.h);
-        // Smoke puffs are staggered along their rise so the plume is continuous.
-        let age = if effect.kind == EffectKind::Smoke { i as f32 / effect.count as f32 * SMOKE_LIFE } else { 0.0 };
+        // Smoke puffs and sparks are staggered along their rise so the stream is continuous.
+        let age = match effect.kind {
+            EffectKind::Smoke => i as f32 / effect.count as f32 * SMOKE_LIFE,
+            EffectKind::Sparks => i as f32 / effect.count as f32 * SPARK_LIFE,
+            _ => 0.0,
+        };
         commands.spawn((
             Sprite { custom_size: Some(size), color: Color::NONE, ..Sprite::from_image(art.image(effect.kind)) },
             Transform::from_translation(room_to_world(pos).extend(0.0)),
@@ -220,6 +239,7 @@ fn spawn_effect(commands: &mut Commands, art: &EffectArt, index: usize, effect: 
 }
 
 const SMOKE_LIFE: f32 = 5.0;
+const SPARK_LIFE: f32 = 1.6;
 
 fn drift_sky(time: Res<Time>, mut skies: Query<(&SkyLayer, &mut Transform)>) {
     let width = ROOM_WIDTH * 2.0;
@@ -330,6 +350,24 @@ fn animate_effects(
                     scale = 0.7 + k * 3.2;
                     alpha = 0.8 * (k * 6.0).min(1.0) * (1.0 - k).powf(0.8);
                 }
+                EffectKind::Sparks => {
+                    // Embers spat up from the fire, rising, wavering and burning out.
+                    if p.age > SPARK_LIFE {
+                        p.age -= SPARK_LIFE;
+                        p.phase = next_random(&mut rng) * 6.28;
+                        p.pos = Vec2::new(r.x + r.w * (0.3 + 0.4 * next_random(&mut rng)), r.y + r.h);
+                    }
+                    let k = p.age / SPARK_LIFE;
+                    let rise = 7.0 + 5.0 * (p.phase * 3.7).sin().abs();
+                    p.pos.y = r.y + r.h - k * r.h * (rise / 12.0);
+                    p.pos.x += (t * 6.0 + p.phase).sin() * 4.0 * dt + 1.2 * dt;
+                    alpha = (1.0 - k).powf(1.5) * (0.75 + 0.25 * (t * 30.0 + p.phase).sin());
+                    scale = 1.0 - 0.5 * k;
+                    transform.translation = room_to_world(p.pos).extend(depth);
+                    transform.scale = Vec3::splat(scale);
+                    sprite.color = Color::srgba(1.0, 0.55 + 0.35 * (1.0 - k), 0.2, alpha); // white-hot to deep orange
+                    continue;
+                }
                 EffectKind::Glow => {
                     // Firelight breathing over the flames.
                     p.pos = Vec2::new(r.x + r.w / 2.0, r.y + r.h / 2.0);
@@ -365,5 +403,14 @@ fn wrap(pos: &mut Vec2, r: RoomRect) {
         pos.y += r.h;
     } else if pos.y > r.y + r.h {
         pos.y -= r.h;
+    }
+}
+
+fn animate_sprites(time: Res<Time>, mut sprites: Query<(&Animated, &mut Sprite)>) {
+    for (animated, mut sprite) in &mut sprites {
+        let frame = (time.elapsed_secs() * animated.fps) as usize % animated.frames.len();
+        if sprite.image != animated.frames[frame] {
+            sprite.image = animated.frames[frame].clone();
+        }
     }
 }

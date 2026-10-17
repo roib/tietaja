@@ -14,8 +14,9 @@
 #     light: #rrggbb                           the room's light, tinting characters and objects
 #     effect <kind>: x y w h [| count N] [| if <conditions>]
 #                                              life in the room: birds, sparkles (on water), motes
-#                                              (dust in sunbeams), leaves, smoke, glow
-#     hotspot <id>: <Name> | x y w h [| sprite <image>] [| if <conditions>]
+#                                              (dust in sunbeams), leaves, smoke, sparks, glow
+#     hotspot <id>: <Name> | x y w h [| sprite <image>] [| frames <count> <per second>] [| if <conditions>]
+#                                              an animated sprite has {} in its path for the frame number
 #     exit <id>: <Name> | x y w h | to <room> <x>
 #
 #   player: <Name>                           who the player is
@@ -62,7 +63,8 @@ room village: Kylä, the village
   effect birds: 0 8 320 40
   effect sparkles: 100 79 76 7 | count 14
   effect smoke: 241 6 8 12 | count 10 | if fire_lit
-  effect glow: 132 80 40 30 | if fire_lit
+  effect glow: 132 85 40 30 | if fire_lit
+  effect sparks: 142 79 20 26 | count 12 | if fire_lit
   floor: 112 140
   hotspot sauna: Sauna | 12 40 82 62
   hotspot house: Kyllikki's house | 180 30 124 74
@@ -71,7 +73,7 @@ room village: Kylä, the village
   hotspot kyllikki: Old Kyllikki | 228 68 18 48 | sprite chars/kyllikki.png
   hotspot bread: Rye bread | 51 97 14 8 | sprite objects/bread.png | if !took_bread
   hotspot button: Something shiny | 176 126 6 6 | sprite objects/button.png | if !took_button
-  hotspot fire: Fire | 137 84 30 22 | sprite objects/fire.png | if fire_lit
+  hotspot fire: Fire | 137 89 30 22 | sprite objects/fire_{}.png | frames 6 10 | if fire_lit
   exit path: Forest path | 304 60 16 84 | to path 20
 
 room path: Polku, the forest path
