@@ -14,12 +14,16 @@ pub struct SceneryPlugin;
 
 impl Plugin for SceneryPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, load_effect_art).add_systems(
+        app.init_resource::<ShownRoom>().add_systems(Startup, (load_effect_art, preload_room_art)).add_systems(
             Update,
-            (sync_scenery.run_if(resource_changed::<Game>), (drift_sky, breathe, animate_sprites, animate_effects)).chain(),
+            (sync_scenery, (drift_sky, breathe, animate_sprites, animate_effects)).chain(),
         );
     }
 }
+
+/// The room currently on screen, which lags the game's room while its art loads.
+#[derive(Resource, Default)]
+pub struct ShownRoom(pub Option<String>);
 
 /// Everything shown for the current room; despawned when the room changes.
 #[derive(Component)]
@@ -78,13 +82,36 @@ struct EffectArt {
     bird: [Handle<Image>; 2],
 }
 
+/// Every room's art, loaded at startup and held for the whole game. Otherwise a room's
+/// images would only be fetched on entering it (and dropped on leaving), showing the bare
+/// wall until they arrive.
+#[derive(Resource)]
+struct RoomArt(#[allow(dead_code)] Vec<Handle<Image>>);
+
+fn preload_room_art(mut commands: Commands, assets: Res<AssetServer>, story: Res<StoryRes>) {
+    let story = &story.0;
+    let paths = story.rooms.iter().flat_map(|room| {
+        std::iter::once(room.background.clone())
+            .chain(room.sky.clone())
+            .chain(room.hotspots.iter().flat_map(|h| h.sprite_frames()))
+    });
+    let icons = story.items.iter().map(|item| item.icon.clone());
+    commands.insert_resource(RoomArt(paths.chain(icons).map(|path| assets.load(path)).collect()));
+}
+
+/// Loaded, or failed to load (so a missing file doesn't hold up the game forever).
+fn ready(assets: &AssetServer, path: &str) -> bool {
+    let state = assets.load_state(&assets.load::<Image>(path.to_owned()));
+    state.is_loaded() || state.is_failed()
+}
+
 #[allow(clippy::too_many_arguments)]
 fn sync_scenery(
     mut commands: Commands,
     assets: Res<AssetServer>,
     story: Res<StoryRes>,
     game: Res<Game>,
-    mut shown_room: Local<Option<String>>,
+    mut shown_room: ResMut<ShownRoom>,
     mut rng: Local<u64>,
     room_entities: Query<Entity, With<RoomEntity>>,
     hotspot_sprites: Query<Entity, With<HotspotSprite>>,
@@ -95,13 +122,26 @@ fn sync_scenery(
         *rng = 0x2545_F491_4F6C_DD1D;
     }
     let room = story.0.room(&game.0.room);
-    let new_room = shown_room.as_deref() != Some(room.id.as_str());
+    let new_room = shown_room.0.as_deref() != Some(room.id.as_str());
+    if !new_room && !game.is_changed() {
+        return;
+    }
+    // Keep showing the old room until the new one's art has arrived, rather than flashing
+    // the bare wall in between.
+    if new_room {
+        let mut paths = std::iter::once(room.background.clone())
+            .chain(room.sky.clone())
+            .chain(room.hotspots.iter().flat_map(|h| h.sprite_frames()));
+        if !paths.all(|path| ready(&assets, &path)) {
+            return;
+        }
+    }
 
     if new_room {
         for entity in &room_entities {
             commands.entity(entity).despawn();
         }
-        *shown_room = Some(room.id.clone());
+        shown_room.0 = Some(room.id.clone());
         // The painting (with its sky cut out) and the sky drifting behind it. Art is painted
         // at a higher resolution than the room, so everything is drawn at room size.
         commands.spawn((
