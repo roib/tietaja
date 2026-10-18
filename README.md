@@ -1,6 +1,6 @@
 # Tietäjä: the origin of fire
 
-A small point-and-click adventure, built with [Bevy](https://bevyengine.org), about how fire came to the village. It's set in Finnish folklore, and its painted rooms follow Werner Holmberg's landscapes. It runs natively and in the browser, including on phones.
+A small point-and-click adventure, built with [Bevy](https://bevyengine.org), about how fire came to the village. It's set in Finnish folklore, and its painted rooms follow [Werner Holmberg](https://en.wikipedia.org/wiki/Werner_Holmberg)'s landscapes. It runs natively and in the browser, including on phones.
 
 **Play it in your browser:** https://roib.github.io/tietaja/
 
