@@ -1,6 +1,6 @@
 # Tietäjä: the origin of fire
 
-A demo game for experimenting with [Bevy](https://bevyengine.org) and WebAssembly: a small point-and-click adventure about how fire came to the village. It's set in Finnish folklore, and its painted rooms follow [Werner Holmberg](https://en.wikipedia.org/wiki/Werner_Holmberg)'s landscapes. It runs natively and in the browser, including on phones.
+A demo game for experimenting with [Bevy](https://bevyengine.org) and [WebAssembly](https://webassembly.org): a small point-and-click adventure about how fire came to the village. It's set in Finnish folklore, and its painted rooms follow [Werner Holmberg](https://en.wikipedia.org/wiki/Werner_Holmberg)'s landscapes. It runs natively and in the browser, including on phones.
 
 **Play it in your browser:** https://roib.github.io/tietaja/
 
