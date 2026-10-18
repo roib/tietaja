@@ -13,7 +13,7 @@ use bevy::{
     ui_widgets::{Activate, Button, observe},
 };
 use intro::{IntroPlugin, Screen};
-use scenery::{SceneryPlugin, ShownRoom};
+use scenery::{PLAYER_LAYER, SceneryPlugin};
 use story::{Choice, Dialogue, GameState, ROOM_HEIGHT, ROOM_WIDTH, Step, Story, VOICE_SYLLABLES, Verb};
 
 /// The painting and the verb panel beneath it form one framed block, centered in the
@@ -22,9 +22,6 @@ const PANEL_RATIO: f32 = 0.4;
 const WALK_SPEED: f32 = 70.0;
 const PLAYER_SIZE: Vec2 = Vec2::new(14.0, 40.0);
 const PLAYER_HEIGHT: f32 = PLAYER_SIZE.y;
-/// Seconds to fade to dark on leaving a room, and back in on arriving.
-const FADE_OUT: f32 = 0.25;
-const FADE_IN: f32 = 0.35;
 
 const PANEL_BG: Color = Color::srgb(0.1, 0.07, 0.05);
 /// Like a painting hung on a dark wall: a wooden frame with a gilt fillet.
@@ -73,19 +70,6 @@ struct Player {
     /// Distance walked, which picks the walk-cycle frame.
     walked: f32,
 }
-
-/// Walking through an exit: fade to dark, change rooms, then fade back in.
-#[derive(Resource, Default)]
-struct Fade {
-    /// The room (and x) to go to once the screen is dark.
-    to: Option<(String, f32)>,
-    /// How dark the scene is, from 0 to 1.
-    darkness: f32,
-}
-
-/// Covers the room, darkening it during a fade.
-#[derive(Component)]
-struct FadeVeil;
 
 /// Vilja standing (frame 0, turned three-quarters) and her walk cycle in profile.
 #[derive(Resource)]
@@ -200,7 +184,6 @@ fn main() {
             walked: 0.0,
         })
         .insert_resource(talk)
-        .init_resource::<Fade>()
         .insert_resource(Ui { verb: Verb::Walk, held: None, hover: None })
         .insert_resource(StoryRes(story))
         .insert_resource(SoundOn(true))
@@ -213,7 +196,7 @@ fn main() {
             (
                 layout,
                 // The game itself waits until the intro is over.
-                (handle_pointer, hover_items, move_player, fade, run_dialogue).run_if(in_state(Screen::Playing)),
+                (handle_pointer, hover_items, move_player, run_dialogue).run_if(in_state(Screen::Playing)),
             )
                 .chain(),
         )
@@ -263,6 +246,7 @@ fn setup(mut commands: Commands, assets: Res<AssetServer>, story: Res<StoryRes>)
             scaling_mode: ScalingMode::AutoMin { min_width: ROOM_WIDTH, min_height: ROOM_HEIGHT },
             ..OrthographicProjection::default_2d()
         }),
+        RenderLayers::from_layers(&[0, PLAYER_LAYER]),
         SceneCamera,
     ));
     // UI camera: covers the whole window, draws no sprites, only the interface.
@@ -277,17 +261,13 @@ fn setup(mut commands: Commands, assets: Res<AssetServer>, story: Res<StoryRes>)
         Sprite { custom_size: Some(PLAYER_SIZE), ..Sprite::from_image(frames[0].clone()) },
         Anchor::BOTTOM_CENTER,
         PlayerSprite,
+        RenderLayers::layer(PLAYER_LAYER),
         // A soft shadow at her feet, cast to the right like the painted shadows.
         children![(
             Sprite { custom_size: Some(Vec2::new(16.0, 4.0)), ..Sprite::from_image(assets.load("objects/shadow.png")) },
             Transform::from_xyz(3.0, 0.5, -0.0005),
+            RenderLayers::layer(PLAYER_LAYER),
         )],
-    ));
-
-    commands.spawn((
-        Sprite { color: Color::NONE, custom_size: Some(Vec2::new(ROOM_WIDTH, ROOM_HEIGHT) * 2.0), ..default() },
-        Transform::from_xyz(0.0, 0.0, 10.0),
-        FadeVeil,
     ));
 
     // Speech floats above whoever is talking.
@@ -483,11 +463,7 @@ fn handle_pointer(
     mut talk: ResMut<Talk>,
     mut ui: ResMut<Ui>,
     mut player: ResMut<Player>,
-    fade: Res<Fade>,
 ) {
-    if fade.to.is_some() {
-        return;
-    }
     // On touch screens a tap is a click where the finger lands (there is no hover).
     let tap = touches.iter_just_pressed().next().map(|t| t.position());
 
@@ -577,9 +553,9 @@ fn enter_room(story: &Story, game: &mut GameState, player: &mut Player, talk: &m
 fn move_player(
     time: Res<Time>,
     story: Res<StoryRes>,
+    mut game: ResMut<Game>,
     mut talk: ResMut<Talk>,
     mut player: ResMut<Player>,
-    mut fade: ResMut<Fade>,
 ) {
     let Some(target) = player.target else {
         return;
@@ -600,38 +576,11 @@ fn move_player(
             player.facing_left = face_x < player.pos.x;
             talk.dialogue = story.0.interaction_node(verb, item.as_deref(), &target).map(Dialogue::new);
         }
-        Some(Action::Exit { room, x }) => fade.to = Some((room, x)),
-        None => {}
-    }
-}
-
-/// Darken the scene, enter the next room once it's dark, and lighten again once that
-/// room is on screen (it may still be loading).
-fn fade(
-    time: Res<Time>,
-    story: Res<StoryRes>,
-    shown: Res<ShownRoom>,
-    mut fade: ResMut<Fade>,
-    mut game: ResMut<Game>,
-    mut talk: ResMut<Talk>,
-    mut player: ResMut<Player>,
-    mut veil: Single<&mut Sprite, With<FadeVeil>>,
-) {
-    let dt = time.delta_secs();
-    if fade.to.is_some() {
-        fade.darkness = (fade.darkness + dt / FADE_OUT).min(1.0);
-        if fade.darkness >= 1.0 {
-            let (room, x) = fade.to.take().unwrap();
+        Some(Action::Exit { room, x }) => {
             enter_room(&story.0, &mut game.0, &mut player, &mut talk, &room, x);
         }
-    } else if fade.darkness > 0.0 && shown.0.as_deref() == Some(game.0.room.as_str()) {
-        fade.darkness = (fade.darkness - dt / FADE_IN).max(0.0);
-    } else {
-        return;
+        None => {}
     }
-    // Ease in and out, so it doesn't snap at either end.
-    let t = fade.darkness;
-    veil.color = Color::BLACK.with_alpha(t * t * (3.0 - 2.0 * t));
 }
 
 /// Advance the dialogue until it needs the player: a line to read or a choice to make.

@@ -2,21 +2,28 @@
 //! hotspot sprites (characters breathe), and the room's effects: birds crossing the sky,
 //! glints on water, dust in sunbeams, falling leaves, chimney smoke, firelight.
 
-use bevy::{prelude::*, sprite::Anchor};
+use bevy::{
+    camera::{RenderTarget, ScalingMode, visibility::RenderLayers},
+    prelude::*,
+    render::render_resource::TextureFormat,
+    sprite::Anchor,
+};
 
 use crate::story::{Effect, EffectKind, Rect as RoomRect, ROOM_HEIGHT, ROOM_WIDTH};
 use crate::{Game, StoryRes, next_random, room_to_world};
 
 /// Room units per second the sky drifts left.
 const SKY_SPEED: f32 = 1.6;
+/// Seconds for the old room to dissolve into the new one.
+const CROSSFADE: f32 = 0.6;
 
 pub struct SceneryPlugin;
 
 impl Plugin for SceneryPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<ShownRoom>().add_systems(Startup, (load_effect_art, preload_room_art)).add_systems(
+        app.init_resource::<ShownRoom>().add_systems(Startup, (load_effect_art, preload_room_art, setup_snapshot)).add_systems(
             Update,
-            (sync_scenery, (drift_sky, breathe, animate_sprites, animate_effects)).chain(),
+            (sync_scenery, (drift_sky, breathe, animate_sprites, animate_effects, dissolve)).chain(),
         );
     }
 }
@@ -31,6 +38,24 @@ struct RoomEntity;
 
 #[derive(Component)]
 struct HotspotSprite;
+
+/// The player is drawn on this layer too, which the snapshot camera doesn't see: she fades
+/// in at the new room's entrance rather than appearing there in the old room's picture.
+pub const PLAYER_LAYER: usize = 2;
+
+/// For crossfading between rooms: a camera that, for a single frame, renders the room
+/// being left into an image. The new room then appears under that picture as it fades.
+#[derive(Resource)]
+struct Snapshot {
+    camera: Entity,
+    image: Handle<Image>,
+}
+
+/// The picture of the room just left, fading out over the new one.
+#[derive(Component)]
+struct Dissolving {
+    age: f32,
+}
 
 /// One of the two side-by-side copies of the room's wide sky.
 #[derive(Component)]
@@ -114,6 +139,9 @@ fn sync_scenery(
     mut shown_room: ResMut<ShownRoom>,
     mut rng: Local<u64>,
     room_entities: Query<Entity, With<RoomEntity>>,
+    snapshot: Res<Snapshot>,
+    mut cameras: Query<&mut Camera>,
+    mut snapshot_taken: Local<bool>,
     hotspot_sprites: Query<Entity, With<HotspotSprite>>,
     emitters: Query<(Entity, &Emitter)>,
     art: Res<EffectArt>,
@@ -134,6 +162,23 @@ fn sync_scenery(
             .chain(room.hotspots.iter().flat_map(|h| h.sprite_frames()));
         if !paths.all(|path| ready(&assets, &path)) {
             return;
+        }
+        // Picture the old room this frame, and swap rooms next frame once it's taken.
+        if shown_room.0.is_some() {
+            let Ok(mut camera) = cameras.get_mut(snapshot.camera) else {
+                return;
+            };
+            camera.is_active = !*snapshot_taken;
+            if !*snapshot_taken {
+                *snapshot_taken = true;
+                return;
+            }
+            *snapshot_taken = false;
+            commands.spawn((
+                Sprite { custom_size: Some(Vec2::new(ROOM_WIDTH, ROOM_HEIGHT)), ..Sprite::from_image(snapshot.image.clone()) },
+                Transform::from_xyz(0.0, 0.0, 50.0),
+                Dissolving { age: 0.0 },
+            ));
         }
     }
 
@@ -203,6 +248,40 @@ fn sync_scenery(
                 commands.entity(entity).despawn();
             }
             _ => {}
+        }
+    }
+}
+
+fn setup_snapshot(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
+    // At the art's resolution (room size times 4), so the picture is as sharp as the room.
+    let image = images.add(Image::new_target_texture(
+        ROOM_WIDTH as u32 * 4,
+        ROOM_HEIGHT as u32 * 4,
+        TextureFormat::Rgba8UnormSrgb,
+        None,
+    ));
+    let camera = commands
+        .spawn((
+            Camera2d,
+            Camera { order: -1, is_active: false, ..default() },
+            Projection::Orthographic(OrthographicProjection {
+                scaling_mode: ScalingMode::Fixed { width: ROOM_WIDTH, height: ROOM_HEIGHT },
+                ..OrthographicProjection::default_2d()
+            }),
+            RenderTarget::Image(image.clone().into()),
+            RenderLayers::layer(0),
+        ))
+        .id();
+    commands.insert_resource(Snapshot { camera, image });
+}
+
+fn dissolve(mut commands: Commands, time: Res<Time>, mut pictures: Query<(Entity, &mut Dissolving, &mut Sprite)>) {
+    for (entity, mut dissolving, mut sprite) in &mut pictures {
+        dissolving.age += time.delta_secs();
+        let t = (dissolving.age / CROSSFADE).min(1.0);
+        sprite.color.set_alpha(1.0 - t * t * (3.0 - 2.0 * t));
+        if t >= 1.0 {
+            commands.entity(entity).despawn();
         }
     }
 }
