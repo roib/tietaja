@@ -40,6 +40,13 @@ Every push to `main` builds the browser version and deploys it to GitHub Pages (
 - `src/`: the engine. `story.rs` parses and runs the story, `main.rs` handles rooms, the player and the UI, `scenery.rs` adds room effects, and `intro.rs` plays the title and intro.
 - `tools/make_art.py` paints the placeholder art (it needs Pillow). `tools/make_audio.py` synthesizes the kantele music and the babble voices (it needs ffmpeg). You can replace any generated file with real art or audio.
 
-## Credits
+## License
 
-The font is Noto Serif by Google, under the [SIL Open Font License 1.1](https://openfontlicense.org) (see `assets/fonts/README.md`).
+The code, art, music and story are dual-licensed under either of
+
+- [MIT License](LICENSE-MIT)
+- [Apache License, Version 2.0](LICENSE-APACHE)
+
+at your option.
+
+The font is Noto Serif by Google, under the [SIL Open Font License 1.1](assets/fonts/OFL.txt).
