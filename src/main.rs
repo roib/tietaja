@@ -930,14 +930,14 @@ fn babble_schedule(text: &str, rate: f32, rng: &mut u64) -> Vec<(f32, f32)> {
             continue;
         }
         for _ in 0..letters.div_ceil(3) {
-            let speed = 0.92 + 0.2 * next_random(rng);
+            let speed = 0.88 + 0.14 * next_random(rng);
             out.push((t, speed));
             t += rate * (0.85 + 0.3 * next_random(rng));
         }
         match word.chars().last() {
             Some('?') => {
                 if let Some(last) = out.last_mut() {
-                    last.1 *= 1.25;
+                    last.1 *= 1.15;
                 }
                 t += rate * 2.5;
             }

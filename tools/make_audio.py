@@ -25,7 +25,19 @@ SYLLABLES_PER_VOICE = 6
 # ---------------------------------------------------------------- output
 
 
-def write_ogg(samples, path, quality=3, peak_level=0.9):
+def lowpass(samples, cutoff):
+    """One-pole low-pass: takes the edge off clicks, bursts and bright harmonics."""
+    a = 1 - math.exp(-2 * math.pi * cutoff / SR)
+    y = 0.0
+    out = []
+    for x in samples:
+        y += a * (x - y)
+        out.append(y)
+    return out
+
+
+def write_ogg(samples, path, quality=3, peak_level=0.9, cutoff=2200):
+    samples = lowpass(lowpass(samples, cutoff), cutoff)
     peak = max(1e-9, max(abs(s) for s in samples))
     gain = peak_level / peak
     out = ASSETS / path
@@ -45,11 +57,13 @@ def write_ogg(samples, path, quality=3, peak_level=0.9):
 
 # ---------------------------------------------------------------- music
 
+# All music sounds this many semitones below the written notes (lower is easier on the ear).
+TRANSPOSE = -3
 NOTE = {"C": -9, "D": -7, "E": -5, "F": -4, "F#": -3, "G": -2, "A": 0, "Bb": 1, "B": 2}
 
 
 def freq(name, octave):
-    return 440.0 * 2 ** ((NOTE[name] + 12 * (octave - 4)) / 12)
+    return 440.0 * 2 ** ((NOTE[name] + 12 * (octave - 4) + TRANSPOSE) / 12)
 
 
 def pluck(f, dur, rng, brightness=0.5, decay=0.996):
@@ -57,7 +71,7 @@ def pluck(f, dur, rng, brightness=0.5, decay=0.996):
     n = max(2, int(SR / f))
     buf = [rng.uniform(-1, 1) for _ in range(n)]
     # Smoother initial noise = darker, softer pluck.
-    for _ in range(int((1 - brightness) * 4)):
+    for _ in range(int((1 - brightness) * 4) + 2):
         buf = [(buf[i] + buf[i - 1]) * 0.5 for i in range(n)]
     out = []
     total = int(dur * SR)
@@ -160,7 +174,7 @@ def village():
         add(track, bt + 3 * beat, pluck(freq("A", 2), 2.0, rng, 0.3, 0.998), 0.3)
         if bar % 2 == 0:
             strum(track, rng, bt + 0.01, [("D", 4), ("F", 4), ("A", 4)], 0.18)
-    write_ogg(reverb(track, 0.35), "music/village.ogg")
+    write_ogg(reverb(track, 0.35), "music/village.ogg", peak_level=0.6)
 
 
 def path():
@@ -249,11 +263,11 @@ def consonant(rng, kind, f0):
     if kind == "s":  # hiss
         n = int(0.045 * SR)
         noise = highpass([rng.uniform(-1, 1) for _ in range(n)], 2)
-        return [0.09 * x * math.sin(math.pi * i / n) for i, x in enumerate(noise)]
+        return [0.04 * x * math.sin(math.pi * i / n) for i, x in enumerate(noise)]
     if kind in "kt":  # stop: brief silence, then a burst
         burst = int(0.008 * SR)
         noise = highpass([rng.uniform(-1, 1) for _ in range(burst)], 1 if kind == "k" else 2)
-        return [0.0] * int(0.02 * SR) + [0.25 * x * (1 - i / burst) for i, x in enumerate(noise)]
+        return [0.0] * int(0.02 * SR) + [0.1 * x * (1 - i / burst) for i, x in enumerate(noise)]
     if kind in "mn":  # hum through the nose: just the low harmonics
         n = int(0.05 * SR)
         f2 = 1.9 if kind == "m" else 2.4
@@ -277,7 +291,7 @@ def syllable(rng, f0, vowel, dur, breath=0.05, vibrato=0.0, glide=-0.08, onset="
     while k * f0 < 4000:
         h = k * f0
         shape = 0.15 + resonance(h, f1, 120) + 0.6 * resonance(h, f2, 160) + 0.2 * resonance(h, f3, 240)
-        rolloff = 1 / (1 + (h / 1800) ** 2)
+        rolloff = 1 / (1 + (h / 1300) ** 2)
         harmonics.append((k, shape * rolloff / k, rng.uniform(0, 2 * math.pi)))
         k += 1
     pre = consonant(rng, onset, f0)
@@ -312,7 +326,7 @@ def chirp(rng, dur, f_start, f_end, harsh=0.4):
         env = min(1.0, i / (0.004 * SR)) * (1 - p) ** 2
         tone = math.sin(phase) + harsh * math.copysign(1, math.sin(2 * phase))
         scratch = rng.uniform(-1, 1) * (1 - min(1.0, i / (0.03 * SR)))
-        out.append(env * (0.6 * tone + 0.5 * scratch))
+        out.append(env * (0.6 * tone + 0.2 * scratch))
     return out + [0.0] * int(0.02 * SR)
 
 
@@ -335,20 +349,20 @@ def voice_clips(rng):
     """name -> list of syllable clips."""
     clips = {"vilja": [], "kyllikki": [], "spirit": [], "magpie": []}
     for onset, vowel in SYLLABLES[:SYLLABLES_PER_VOICE]:
-        clips["vilja"].append(syllable(rng, 255, vowel, 0.1, breath=0.03, glide=-0.05, onset=onset))
+        clips["vilja"].append(syllable(rng, 205, vowel, 0.1, breath=0.03, glide=-0.05, onset=onset))
         old_vowel = "ö" if vowel == "i" else vowel
-        clips["kyllikki"].append(syllable(rng, 175, old_vowel, 0.13, breath=0.08, vibrato=0.025, glide=-0.1, onset=onset))
-        clips["spirit"].append(echo(syllable(rng, 95, "o" if vowel in "ie" else vowel, 0.24, breath=0.3, glide=0.04,
+        clips["kyllikki"].append(syllable(rng, 140, old_vowel, 0.13, breath=0.08, vibrato=0.025, glide=-0.1, onset=onset))
+        clips["spirit"].append(echo(syllable(rng, 80, "o" if vowel in "ie" else vowel, 0.24, breath=0.3, glide=0.04,
                                              onset="m" if onset else ""), 0.15, 0.5))
-        f = rng.uniform(1500, 2200)
-        clips["magpie"].append(chirp(rng, rng.uniform(0.06, 0.1), f, f * rng.uniform(1.3, 1.7)))
+        f = rng.uniform(750, 1050)
+        clips["magpie"].append(chirp(rng, rng.uniform(0.07, 0.11), f, f * rng.uniform(1.2, 1.45), harsh=0.12))
     return clips
 
 
 def voices():
     for name, clips in voice_clips(random.Random(50)).items():
         for i, clip in enumerate(clips):
-            write_ogg(clip, f"voices/{name}/{i}.ogg", 4)
+            write_ogg(clip, f"voices/{name}/{i}.ogg", 4, peak_level=0.55 if name == "magpie" else 0.9)
 
 
 # ---------------------------------------------------------------- intro score
