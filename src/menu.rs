@@ -3,6 +3,7 @@
 
 use bevy::{
     audio::{AudioSinkPlayback, Volume},
+    input::{ButtonState, keyboard::KeyboardInput},
     picking::hover::Hovered,
     prelude::*,
     ui_widgets::{Activate, Button, observe},
@@ -22,6 +23,14 @@ const LEAVE_SECONDS: f32 = 1.4;
 const GILT: Color = Color::srgb(0.74, 0.6, 0.32);
 const GILT_BRIGHT: Color = Color::srgb(1.0, 0.86, 0.55);
 const LABEL: Color = Color::srgb(0.85, 0.78, 0.64);
+/// Typing this on the menu unlocks unreleased tales, for testing (as in saunatonttu).
+const SECRET: [KeyCode; 6] = [KeyCode::KeyT, KeyCode::KeyO, KeyCode::KeyN, KeyCode::KeyT, KeyCode::KeyT, KeyCode::KeyU];
+/// ...as does tapping the logo this many times, each within a second of the last.
+const SECRET_TAPS: u32 = 7;
+
+/// Unreleased tales unlocked for testing, for the rest of the session.
+#[derive(Resource, Default)]
+pub struct Unlocked(pub bool);
 
 #[derive(Resource, Default)]
 struct Menu {
@@ -30,6 +39,14 @@ struct Menu {
     selected: usize,
     /// Seconds since a tale was chosen.
     leaving: Option<f32>,
+    /// Seconds since a locked tale was chosen, for a little shake of its card.
+    refused: Option<f32>,
+    /// How much of the secret has been typed.
+    typed: usize,
+    /// Taps on the logo so far, and when the last one was.
+    taps: (u32, f32),
+    /// When the secret was entered, to say so for a moment.
+    unlocked_at: Option<f32>,
 }
 
 #[derive(Component)]
@@ -50,6 +67,13 @@ struct Card(usize);
 #[derive(Component)]
 struct CardLabel(usize);
 
+/// Covers a tale's card until its release.
+#[derive(Component)]
+struct LockBanner(usize);
+
+#[derive(Component)]
+struct Logo;
+
 #[derive(Component)]
 struct MenuFade;
 
@@ -60,7 +84,8 @@ pub struct MenuPlugin;
 
 impl Plugin for MenuPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(OnEnter(Screen::Menu), spawn_menu)
+        app.init_resource::<Unlocked>()
+            .add_systems(OnEnter(Screen::Menu), spawn_menu)
             .add_systems(Update, (input, animate).chain().run_if(in_state(Screen::Menu)))
             .add_systems(OnExit(Screen::Menu), despawn_menu);
     }
@@ -86,6 +111,12 @@ fn spawn_menu(mut commands: Commands, assets: Res<AssetServer>, levels: Res<Leve
         ));
         frame.spawn((
             ImageNode::new(assets.load("intro/logo.png")),
+            Button,
+            Logo,
+            observe(|_: On<Activate>, mut menu: ResMut<Menu>| {
+                let (count, last) = menu.taps;
+                menu.taps = (if menu.time - last < 1.0 { count + 1 } else { 1 }, menu.time);
+            }),
             Node {
                 position_type: PositionType::Absolute,
                 width: percent(54),
@@ -123,10 +154,10 @@ fn spawn_menu(mut commands: Commands, assets: Res<AssetServer>, levels: Res<Leve
                     },
                     UiTransform::default(),
                     Card(i),
-                    observe(move |_: On<Activate>, mut menu: ResMut<Menu>| {
+                    observe(move |_: On<Activate>, levels: Res<Levels>, unlocked: Res<Unlocked>, mut menu: ResMut<Menu>| {
                         if menu.leaving.is_none() && menu.time > 0.6 {
                             menu.selected = i;
-                            menu.leaving = Some(0.0);
+                            choose(&mut menu, &levels, &unlocked);
                         }
                     }),
                 ))
@@ -139,7 +170,56 @@ fn spawn_menu(mut commands: Commands, assets: Res<AssetServer>, levels: Res<Leve
                             ImageNode::new(assets.load(level.card)),
                             Node { width: percent(100), height: percent(100), ..default() },
                         )],
-                    ));
+                    ))
+                    .with_children(|picture| {
+                        let Some((_, when)) = level.release else {
+                            return;
+                        };
+                        // The card dimmed, with a ribbon across it naming the day.
+                        picture
+                            .spawn((
+                                Node {
+                                    position_type: PositionType::Absolute,
+                                    width: percent(100),
+                                    height: percent(100),
+                                    justify_content: JustifyContent::Center,
+                                    align_items: AlignItems::Center,
+                                    ..default()
+                                },
+                                BackgroundColor(Color::srgba(0.02, 0.01, 0.02, 0.55)),
+                                LockBanner(i),
+                            ))
+                            .with_children(|veil| {
+                                veil.spawn((
+                                    Node {
+                                        width: percent(100),
+                                        padding: UiRect::axes(px(8), px(10)),
+                                        flex_direction: FlexDirection::Column,
+                                        align_items: AlignItems::Center,
+                                        border: UiRect::vertical(px(2)),
+                                        ..default()
+                                    },
+                                    BackgroundColor(Color::srgba(0.1, 0.05, 0.03, 0.88)),
+                                    BorderColor::all(GILT),
+                                    children![
+                                        (
+                                            Text::new("COMING SOON"),
+                                            TextFont::default(),
+                                            TextColor(GILT_BRIGHT),
+                                            TextLayout::justify(Justify::Center),
+                                            CardLabel(usize::MAX),
+                                        ),
+                                        (
+                                            Text::new(when),
+                                            TextFont::default(),
+                                            TextColor(LABEL),
+                                            TextLayout::justify(Justify::Center),
+                                            CardLabel(usize::MAX - 1),
+                                        ),
+                                    ],
+                                ));
+                            });
+                    });
                     card.spawn((
                         Text::new(format!("{} · {title}", level.numeral)),
                         TextFont::default(),
@@ -175,15 +255,40 @@ fn despawn_menu(mut commands: Commands, entities: Query<Entity, Or<(With<MenuRoo
     }
 }
 
-/// Arrow keys move between the cards and Enter chooses; the pointer selects what it moves onto.
+/// Start the selected tale, or shake its card if it isn't out yet.
+fn choose(menu: &mut Menu, levels: &Levels, unlocked: &Unlocked) {
+    if levels.0[menu.selected].playable(unlocked.0) {
+        menu.leaving = Some(0.0);
+    } else {
+        menu.refused = Some(0.0);
+    }
+}
+
+/// Arrow keys move between the cards and Enter chooses; the pointer selects what it moves
+/// onto. The secret word, or taps on the logo, unlock unreleased tales.
 fn input(
     keys: Res<ButtonInput<KeyCode>>,
+    mut typing: MessageReader<KeyboardInput>,
     levels: Res<Levels>,
     cards: Query<(&Card, &Hovered), Changed<Hovered>>,
+    mut unlocked: ResMut<Unlocked>,
     mut menu: ResMut<Menu>,
 ) {
+    // Key events, in the order they were typed (several can arrive in one frame).
+    let typed: Vec<KeyCode> = typing.read().filter(|k| k.state == ButtonState::Pressed && !k.repeat).map(|k| k.key_code).collect();
     if menu.leaving.is_some() {
         return;
+    }
+    for key in typed {
+        menu.typed = if key == SECRET[menu.typed] { menu.typed + 1 } else { usize::from(key == SECRET[0]) };
+        if menu.typed == SECRET.len() {
+            menu.typed = 0;
+            unlock(&mut menu, &mut unlocked);
+        }
+    }
+    if menu.taps.0 >= SECRET_TAPS {
+        menu.taps = (0, 0.0);
+        unlock(&mut menu, &mut unlocked);
     }
     let count = levels.0.len();
     if keys.any_just_pressed([KeyCode::ArrowRight, KeyCode::KeyD, KeyCode::Tab]) {
@@ -199,7 +304,14 @@ fn input(
         }
     }
     if keys.any_just_pressed([KeyCode::Enter, KeyCode::Space]) && menu.time > 0.6 {
-        menu.leaving = Some(0.0);
+        choose(&mut menu, &levels, &unlocked);
+    }
+}
+
+fn unlock(menu: &mut Menu, unlocked: &mut Unlocked) {
+    if !unlocked.0 {
+        unlocked.0 = true;
+        menu.unlocked_at = Some(menu.time);
     }
 }
 
@@ -209,12 +321,13 @@ fn animate(
     window: Single<&Window>,
     ui_scale: Res<UiScale>,
     sound: Res<SoundOn>,
+    levels: Res<Levels>,
+    unlocked: Res<Unlocked>,
     mut menu: ResMut<Menu>,
     mut current: ResMut<CurrentLevel>,
     mut next: ResMut<NextState<Screen>>,
-    mut frame: Single<&mut Node, (With<MenuFrame>, Without<Backdrop>)>,
-    mut backdrop: Single<&mut Node, (With<Backdrop>, Without<MenuFrame>)>,
-    mut heading: Single<&mut TextFont, (With<Heading>, Without<CardLabel>)>,
+    mut nodes: Query<(&mut Node, Has<MenuFrame>, Option<&LockBanner>), Or<(With<MenuFrame>, With<Backdrop>, With<LockBanner>)>>,
+    heading: Single<(&mut Text, &mut TextFont), (With<Heading>, Without<CardLabel>)>,
     mut cards: Query<(&Card, &mut UiTransform, &Children)>,
     mut borders: Query<&mut BorderColor>,
     mut labels: Query<(&CardLabel, &mut TextColor, &mut TextFont), Without<Heading>>,
@@ -228,17 +341,39 @@ fn animate(
 
     let (ww, wh) = (window.width(), window.height());
     let (fw, fh) = if ww / wh > FRAME_ASPECT { (wh * FRAME_ASPECT, wh) } else { (ww, ww / FRAME_ASPECT) };
-    frame.left = px((ww - fw) / 2.0 / k);
-    frame.top = px((wh - fh) / 2.0 / k);
-    frame.width = px(fw / k);
-    frame.height = px(fh / k);
+    for (mut node, is_frame, banner) in &mut nodes {
+        if is_frame {
+            node.left = px((ww - fw) / 2.0 / k);
+            node.top = px((wh - fh) / 2.0 / k);
+            node.width = px(fw / k);
+            node.height = px(fh / k);
+        } else if let Some(LockBanner(i)) = banner {
+            // Gone once the tale is out (or unlocked), even while the menu is open.
+            let display = if levels.0[*i].playable(unlocked.0) { Display::None } else { Display::Flex };
+            if node.display != display {
+                node.display = display;
+            }
+        } else {
+            // The northern lights, drifting slowly up and down behind the title.
+            node.top = px(-fw * (0.2 + 0.03 * (t * 0.05).sin()) / k);
+        }
+    }
 
-    // The northern lights, drifting slowly up and down behind the title.
-    backdrop.top = px(-fw * (0.2 + 0.03 * (t * 0.05).sin()) / k);
-
+    let (mut heading_text, mut heading_font) = heading.into_inner();
     let heading_size = FontSize::Px((fh * 0.034).max(13.0) / k);
-    if heading.font_size != heading_size {
-        heading.font_size = heading_size;
+    if heading_font.font_size != heading_size {
+        heading_font.font_size = heading_size;
+    }
+    let says = if menu.unlocked_at.is_some_and(|at| t - at < 3.0) { "Unreleased tales unlocked for testing" } else { "Choose a tale" };
+    if heading_text.0 != says {
+        heading_text.0 = says.to_string();
+    }
+    let refused = menu.refused.map_or(1.0, |at| at);
+    if let Some(seconds) = menu.refused.as_mut() {
+        *seconds += dt;
+        if *seconds > 0.5 {
+            menu.refused = None;
+        }
     }
 
     // The selected card lifts and its frame brightens; the other dims a little.
@@ -248,6 +383,9 @@ fn animate(
         let target = if selected { 1.05 + 0.03 * smoothstep(leaving * 3.0) } else { 1.0 };
         let scale = transform.scale.x + (target - transform.scale.x) * (dt * 10.0).min(1.0);
         transform.scale = Vec2::splat(scale);
+        // A locked card shakes its head when chosen.
+        let shake = if selected && refused < 0.5 { (refused * 40.0).sin() * 10.0 * (1.0 - refused * 2.0) } else { 0.0 };
+        transform.translation = Val2::px(shake, 0.0);
         if let Ok(mut border) = borders.get_mut(children[0]) {
             let glow = if selected { 0.6 + 0.4 * (t * 2.6).sin().abs() } else { 0.0 };
             border.set_all(GILT.mix(&GILT_BRIGHT, glow));
@@ -255,9 +393,13 @@ fn animate(
     }
     let label_size = FontSize::Px((fh * 0.036).max(13.0) / k);
     for (CardLabel(i), mut color, mut font) in &mut labels {
-        color.0 = if *i == menu.selected { GILT_BRIGHT } else { LABEL };
-        if font.font_size != label_size {
-            font.font_size = label_size;
+        // The banner's two lines (numbered from the top) keep their colours, a little smaller.
+        let size = if *i >= usize::MAX - 1 { FontSize::Px((fh * 0.03).max(11.0) / k) } else { label_size };
+        if *i < usize::MAX - 1 {
+            color.0 = if *i == menu.selected { GILT_BRIGHT } else { LABEL };
+        }
+        if font.font_size != size {
+            font.font_size = size;
         }
     }
 

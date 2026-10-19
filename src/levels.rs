@@ -13,6 +13,20 @@ pub struct Level {
     pub card: &'static str,
     pub story: Arc<Story>,
     pub intro: IntroDef,
+    /// Locked until then: Unix time in seconds, and how to say it on the menu.
+    pub release: Option<(u64, &'static str)>,
+}
+
+impl Level {
+    /// Whether it can be played yet. `unlocked` is the secret testing override.
+    pub fn playable(&self, unlocked: bool) -> bool {
+        unlocked || self.release.is_none_or(|(at, _)| now() >= at)
+    }
+}
+
+/// Seconds since the Unix epoch, natively and in the browser.
+fn now() -> u64 {
+    web_time::SystemTime::now().duration_since(web_time::UNIX_EPOCH).map_or(0, |d| d.as_secs())
 }
 
 #[derive(Resource)]
@@ -32,12 +46,15 @@ impl Levels {
                 card: "cards/fire.png",
                 story: parse("story.txt", include_str!("../assets/story.txt"))?,
                 intro: FIRE_INTRO,
+                release: None,
             },
             Level {
                 numeral: "II",
                 card: "cards/sauna.png",
                 story: parse("sauna.txt", include_str!("../assets/sauna.txt"))?,
                 intro: SAUNA_INTRO,
+                // 7 am Pacific time.
+                release: Some((1_793_455_200, "Releasing October 31, 2026 · 7 AM PT")),
             },
         ]))
     }
@@ -120,3 +137,19 @@ const SAUNA_INTRO: IntroDef = IntroDef {
     title: "intro/title_sauna.png",
     flash: [1.0, 0.8, 0.58],
 };
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unreleased_tales_are_locked_unless_unlocked() {
+        let levels = Levels::load().unwrap();
+        let mut sauna = levels.0.into_iter().nth(1).unwrap();
+        sauna.release = Some((now() + 3600, "in an hour"));
+        assert!(!sauna.playable(false));
+        assert!(sauna.playable(true), "the secret unlocks it for testing");
+        sauna.release = Some((now() - 1, "a moment ago"));
+        assert!(sauna.playable(false), "released tales open by themselves");
+    }
+}
