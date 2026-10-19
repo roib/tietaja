@@ -186,6 +186,14 @@ fn main() {
     App::new()
         .add_plugins(
             DefaultPlugins
+                // Web builds load assets from a folder named for the build, so browsers
+                // never mix cached old art with new code (tools/build_web.sh). No asset has
+                // a .meta file, so don't ask the server for one each time (on the web, a 404).
+                .set(AssetPlugin {
+                    file_path: option_env!("TIETAJA_ASSET_DIR").unwrap_or("assets").into(),
+                    meta_check: bevy::asset::AssetMetaCheck::Never,
+                    ..default()
+                })
                 .set(WindowPlugin {
                     primary_window: Some(Window {
                         title: "Tietäjä".into(),

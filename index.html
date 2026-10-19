@@ -8,8 +8,9 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="screen-orientation" content="landscape" />
     <title>Tietäjä</title>
-    <!-- Start downloading the game while the title screen shows. -->
-    <link rel="preload" href="tietaja_bg.wasm" as="fetch" type="application/wasm" crossorigin />
+    <!-- Start downloading the game while the title screen shows. "?v=dev" becomes each
+         build's version (tools/build_web.sh), so browsers fetch new code after a deploy. -->
+    <link rel="preload" href="tietaja_bg.wasm?v=dev" as="fetch" type="application/wasm" crossorigin />
     <style>
       html, body {
         margin: 0; height: 100%; background: #000; overflow: hidden;
@@ -49,7 +50,7 @@
       <p>Turn your phone sideways to play</p>
     </div>
     <script type="module">
-      import init from "./tietaja.js";
+      import init from "./tietaja.js?v=dev";
 
       const start = document.getElementById("start");
       const status = document.getElementById("status");
@@ -74,7 +75,7 @@
           status.textContent = "Loading…";
           goLandscape();
           try {
-            await init();
+            await init({ module_or_path: "./tietaja_bg.wasm?v=dev" });
           } catch (e) {
             // winit leaves its event loop by throwing this on the web; the game keeps running.
             if (!String(e).includes("Using exceptions for control flow")) {
