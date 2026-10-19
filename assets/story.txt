@@ -14,14 +14,21 @@
 #     light: #rrggbb                           the room's light, tinting characters and objects
 #     effect <kind>: x y w h [| count N] [| if <conditions>]
 #                                              life in the room: birds, sparkles (on water), motes
-#                                              (dust in sunbeams), leaves, smoke, sparks, glow
-#     hotspot <id>: <Name> | x y w h [| sprite <image>] [| frames <count> <per second>] [| if <conditions>]
-#                                              an animated sprite has {} in its path for the frame number
+#                                              (dust in sunbeams), leaves, smoke, sparks, glow,
+#                                              snow (falling), aurora (curtains of light behind
+#                                              the room, in its sky), spirit (sparks of spirit-fire),
+#                                              streak (the fire fox racing across the sky, from the
+#                                              bottom left of the area, trailing sparks; count = sparks)
+#     hotspot <id>: <Name> | x y w h [| sprite <image>] [| frames <count> <per second>] [| if <conditions>] [| glows]
+#                                              an animated sprite has {} in its path for the frame number;
+#                                              one that glows makes its own light (the room's doesn't tint it)
 #     exit <id>: <Name> | x y w h | to <room> <x>
 #
 #   title: <Name>                            the tale's name, on the menu
 #   ending: <text>                           shown once the tale is won
 #   player: <Name>                           who the player is
+#   player_art: <path prefix>                her sprites, <prefix>_stand.png and
+#                                            <prefix>_walk_0..3.png (default chars/vilja)
 #   start: <room> <x>                        where the game begins
 #   intro: <node>                            node run when the game starts
 #   ending_music: <file>                     music after `win`
@@ -30,7 +37,8 @@
 #
 # Clicking a hotspot runs the node named <verb>_<hotspot>, e.g. look_hearth.
 # Using an item on a hotspot runs use_<item>_<hotspot>, e.g. use_bread_stone.
-# If no node exists, default_<verb> runs instead.
+# If no node exists, default_<verb> runs instead. A plain click (no verb) only walks there,
+# unless the hotspot has a walk_<hotspot> node.
 #
 # Node lines (any line can start with [conditions], e.g. [knows_fire !fire_lit]):
 #   Speaker: text           say a line, click to continue

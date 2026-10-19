@@ -38,7 +38,7 @@ fi
 # A version from everything that goes into the build. GitHub Pages lets browsers cache
 # files for 10 minutes, so each build's files get new URLs: the code with ?v=<version>,
 # the assets in assets-<version>/ (the game is compiled to load them from there).
-VERSION=$(find assets src index.html Cargo.toml Cargo.lock -type f -print0 | sort -z | xargs -0 sha1sum | sha1sum | cut -c1-10)
+VERSION=$(find assets src web index.html Cargo.toml Cargo.lock -type f -print0 | sort -z | xargs -0 sha1sum | sha1sum | cut -c1-10)
 echo "Version $VERSION"
 export TIETAJA_ASSET_DIR="assets-$VERSION"
 
@@ -49,5 +49,6 @@ mkdir -p dist
 "$WASM_BINDGEN" --target web --no-typescript --out-dir dist target/wasm32-unknown-unknown/web/tietaja.wasm
 sed "s/?v=dev/?v=$VERSION/g" index.html > dist/index.html
 cp -r assets "dist/$TIETAJA_ASSET_DIR"
+cp web/* dist/  # the favicon, app icons and web app manifest, beside the page
 
 echo "Built dist/ ($(du -sh dist | cut -f1)). Serve it with: python3 -m http.server -d dist 8080"

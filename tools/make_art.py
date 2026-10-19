@@ -2699,7 +2699,69 @@ def sauna_objects():
     painted_figure(lambda: twigs(28, 14, bound=True), "objects/vihta.png", 70, brushes=SMALL_BRUSHES)
 
 
+WEB = ASSETS.parent / "web"  # files served beside the page: the favicon and app icons
+
+
+def favicon():
+    """The site's icon: a golden flame under curtains of northern lights, on a night-blue
+    tile with a gilt rim, like the menu's cards. Painted large, then shrunk to each size."""
+    n = 512
+    rng = random.Random(97)
+    tile = Image.new("L", (n, n), 0)
+    ImageDraw.Draw(tile).rounded_rectangle([8, 8, n - 9, n - 9], radius=104, fill=255)
+    img = Image.new("RGBA", (n, n))
+    d = ImageDraw.Draw(img)
+    for y in range(n):
+        d.line([(0, y), (n, y)], fill=mix((4, 8, 30), (22, 44, 86), y / n) + (255,))
+    for _ in range(40):  # stars
+        x, y, r = rng.uniform(40, n - 40), rng.uniform(30, n * 0.5), rng.uniform(2, 5)
+        d.ellipse([x - r, y - r, x + r, y + r], fill=(220, 230, 255, rng.randint(120, 230)))
+    # The aurora: two curtains of green rays arching over the top, violet at their upper edge.
+    lights = Image.new("RGBA", (n, n))
+    ld = ImageDraw.Draw(lights)
+    for base, height, alpha in ((210, 120, 255), (150, 80, 150)):
+        for x in range(0, n, 3):
+            u = x / n
+            y0 = base - 60 * math.sin(u * math.pi) + 14 * math.sin(u * 9 + base)
+            h = height * (0.6 + 0.4 * abs(math.sin(u * 13 + base)))
+            for k in range(20):
+                t0, t1 = k / 20, (k + 1) / 20
+                col = mix((140, 255, 180), (150, 90, 230), t0 ** 1.2)
+                ld.line([(x, y0 - h * t0), (x, y0 - h * t1)], fill=col + (int(alpha * (1 - t0) ** 1.3),), width=3)
+    img.alpha_composite(lights.filter(ImageFilter.GaussianBlur(14)))
+    img.alpha_composite(lights.filter(ImageFilter.GaussianBlur(3)))
+    # The flame: a halo, an orange body, a gold heart and a white-hot core.
+    def flame(scale, color, blur):
+        m = Image.new("L", (n, n), 0)
+        cx, base, top = n / 2, 430 - (1 - scale) * 40, 140 + (1 - scale) * 150
+        w = 118 * scale
+        tip = (cx + w * 0.35, top)  # the tip flicks to one side, like a real flame
+        pts = (curve(tip, (cx + w * 0.2, top + (base - top) * 0.35), (cx + w * 0.95, base - w * 1.1), 16)
+               + curve((cx + w * 0.95, base - w * 1.1), (cx + w * 1.1, base - w * 0.2), (cx, base), 16)
+               + curve((cx, base), (cx - w * 1.15, base - w * 0.25), (cx - w * 0.85, base - w * 1.3), 16)
+               + curve((cx - w * 0.85, base - w * 1.3), (cx - w * 0.5, top + (base - top) * 0.3), tip, 16))
+        ImageDraw.Draw(m).polygon(pts, fill=255)
+        lay = Image.new("RGBA", (n, n), color + (255,))
+        lay.putalpha(m.filter(ImageFilter.GaussianBlur(blur)))
+        img.alpha_composite(lay)
+    flame(1.25, (255, 110, 40), 40)  # the glow
+    flame(1.0, (238, 96, 40), 2)
+    flame(0.72, (255, 176, 70), 3)
+    flame(0.42, (255, 238, 190), 4)
+    img.putalpha(ImageChops.multiply(img.getchannel("A"), tile))
+    rim = ImageChops.subtract(tile, tile.filter(ImageFilter.MinFilter(15)))
+    gilt = Image.new("RGBA", (n, n), (226, 180, 96, 255))
+    gilt.putalpha(rim)
+    img.alpha_composite(gilt)
+    WEB.mkdir(exist_ok=True)
+    for size, name in ((32, "favicon-32.png"), (180, "apple-touch-icon.png"), (192, "icon-192.png"), (512, "icon-512.png")):
+        img.resize((size, size), Image.LANCZOS).save(WEB / name)
+    img.save(WEB / "favicon.ico", sizes=[(16, 16), (32, 32), (48, 48)])
+    print("icons written to", WEB)
+
+
 def titles():
+    favicon()
     title_logo()
     title_logo("THE SAUNA SPIRIT", "intro/title_sauna.png")
     title_logo(None, "intro/logo.png")
@@ -2735,11 +2797,18 @@ def first_tale():
     title_logo()
 
 
+def fox_tale():
+    """The third tale's art is painted by make_fox_art.py, with these painters."""
+    import make_fox_art
+
+    make_fox_art.fox_tale()
+
+
 if __name__ == "__main__":
     # Paint everything, or only some parts: `make_art.py sauna_interior shore`. The second
     # tale's evening rooms and menu cards are made from the first tale's art.
     import sys
 
-    for name in sys.argv[1:] or ["first_tale", "sauna_tale"]:
+    for name in sys.argv[1:] or ["first_tale", "sauna_tale", "fox_tale"]:
         globals()[name]()
     print("art written to", ASSETS)

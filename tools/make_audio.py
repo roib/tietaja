@@ -848,11 +848,18 @@ def first_tale():
     title_music()
 
 
+def fox_tale():
+    """The third tale's music and voices are made by make_fox_audio.py, with these instruments."""
+    import make_fox_audio
+
+    make_fox_audio.fox_tale()
+
+
 if __name__ == "__main__":
     # Make everything, or only some parts: `make_audio.py sauna_tale`.
     import sys
 
-    names = sys.argv[1:] or ["first_tale", "sauna_tale", "voices"]
+    names = sys.argv[1:] or ["first_tale", "sauna_tale", "fox_tale", "voices"]
     for name in names:
         print(f"{name}:")
         globals()[name]()

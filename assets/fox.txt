@@ -1,0 +1,554 @@
+# Tietäjä III: the fire fox
+#
+# Kaamos, the polar night in Lapland, and for three nights the northern lights haven't
+# burned. The file format is described at the top of story.txt.
+
+title: The Fire Fox
+ending: The sky burns green again.
+player: Vilja
+player_art: chars/vilja_winter
+start: camp 150
+intro: intro
+ending_music: music/ending.ogg
+
+character Vilja: #f4f0e6 | voice voices/vilja 0.075
+character Mummo: #f0c46a | voice voices/mummo 0.11
+character Jussi: #e0a878 | voice voices/jussi 0.1
+
+item snowshoes: Snowshoes | items/snowshoes.png
+item box: Birch-bark box | items/box.png
+item ember: Ember in the box | items/ember.png
+item line: Fishing line | items/line.png
+item fish: Whitefish | items/fish.png
+item puukko: Puukko | items/puukko.png
+item fur: Glowing fur | items/fur.png
+
+room camp: Kota, the herders' camp
+  background: rooms/camp.png
+  sky: rooms/camp_sky.png
+  light: #c8d6ff
+  music: music/fells.ogg
+  effect snow: 0 0 320 144 | count 70
+  effect smoke: 64 18 8 14 | count 10
+  effect glow: 146 96 30 26
+  effect sparks: 154 94 14 24 | count 8
+  effect aurora: 0 0 320 70 | count 7 | if sky_lit
+  floor: 114 140
+  hotspot kota: Kota | 18 32 96 82
+  hotspot snowshoes: Snowshoes | 100 84 12 28 | sprite objects/snowshoes.png | if !snowshoes
+  hotspot band: Woven band | 120 62 8 36
+  hotspot fire: Campfire | 146 100 30 22 | sprite objects/fire_{}.png | frames 6 10
+  hotspot mummo: Mummo | 186 70 18 46 | sprite chars/mummo.png
+  hotspot reindeer: Reindeer | 226 84 86 30
+  exit lake: Down to the lake | 0 60 12 84 | to lake 290
+  exit forest: Into the forest | 308 60 12 84 | to forest 24
+
+room lake: Järvi, the frozen lake
+  background: rooms/lake.png
+  sky: rooms/lake_sky.png
+  light: #c0d2ff
+  music: music/fells.ogg
+  effect snow: 0 0 320 144 | count 60
+  effect sparkles: 20 104 280 36 | count 18
+  effect aurora: 0 0 320 70 | count 8 | if sky_lit
+  floor: 112 140
+  hotspot hole: Fishing hole | 142 114 30 10
+  hotspot line: Frozen line | 176 112 12 8 | sprite objects/line.png | if !took_line
+  hotspot fells: The fells | 0 44 320 40
+  exit camp: Back to the camp | 308 60 12 84 | to camp 24
+
+room forest: Korpi, the spruce forest
+  background: rooms/forest.png
+  sky: rooms/forest_sky.png
+  light: #b8c8f0
+  music: music/fells.ogg
+  effect snow: 0 0 320 144 | count 50
+  effect smoke: 272 30 6 14 | count 8
+  effect aurora: 0 0 320 50 | count 6 | if sky_lit
+  floor: 116 140
+  hotspot cabin: Jussi's cabin | 196 30 110 84
+  hotspot snares: Snares | 286 70 18 26
+  hotspot jussi: Jussi | 170 72 18 46 | sprite chars/jussi.png
+  hotspot prints: Paw prints | 70 124 150 12
+  hotspot drifts: Up to the fell | 306 50 14 94 | if !snowshoes
+  exit fell: Up to the fell | 306 50 14 94 | to fell 30 | if snowshoes
+  exit camp: Back to the camp | 0 60 12 84 | to camp 290
+
+room fell: Tunturi, the fell top
+  background: rooms/fell.png
+  sky: rooms/fell_sky.png
+  light: #c4d4ff
+  music: music/fell.ogg
+  enter: fell_enter
+  effect snow: 0 0 320 144 | count 50
+  effect aurora: -20 -6 360 74 | count 11 | if sky_lit
+  effect glow: 224 90 52 30 | if fox_lit !run_1 !sky_lit
+  effect spirit: 226 70 48 40 | count 30 | if fox_lit !run_1 !sky_lit
+  effect glow: 60 90 52 30 | if run_1 !sky_lit
+  effect spirit: 40 40 60 70 | count 40 | if run_1 !sky_lit
+  effect glow: 36 60 46 56 | if run_2 !sky_lit
+  effect glow: 30 50 56 70 | if run_4 !sky_lit
+  effect glow: 124 50 42 66 | if sky_lit
+  effect spirit: 126 0 36 100 | count 50 | if sky_lit
+  effect streak: 145 -4 210 40 | count 70 | if sky_lit
+  floor: 114 140
+  hotspot hare: Hare-shaped spruce | 38 38 38 74
+  hotspot owl: Owl-shaped spruce | 128 26 34 86
+  hotspot bear: Bear-shaped spruce | 214 40 50 72
+  hotspot snare: Torn snare | 176 108 10 12 | sprite objects/snare.png | if !took_fur
+  hotspot fox: Fire fox | 220 86 60 30 | sprite objects/firefox_{}.png | frames 4 8 | if fox_lit !run_1 !sky_lit | glows
+  hotspot fox: Fire fox | 62 86 60 30 | sprite objects/firefox_{}.png | frames 4 8 | if run_1 !sky_lit | glows
+  hotspot sky: The sky | 0 0 320 26
+  exit den: Den in the rocks | 282 96 38 26 | to den 60
+  exit forest: Back down to the forest | 0 60 12 84 | to forest 290
+
+room den: Kolo, the fox's den
+  background: rooms/den.png
+  light: #9cacd8
+  music: music/fell.ogg
+  enter: den_enter
+  effect snow: 0 0 60 70 | count 10
+  effect glow: 190 88 50 34 | if fox_out
+  floor: 118 140
+  hotspot tail: A faint glow in the dark | 198 104 24 10 | sprite objects/foxtail_{}.png | frames 6 3 | if !fox_out
+  hotspot grey: Fox | 184 94 54 26 | sprite objects/fox_grey.png | if fox_out !fox_lit
+  hotspot roots: Roots | 120 20 120 30
+  exit fell: Out into the snow | 0 30 34 100 | to fell 268
+
+# ---------------------------------------------------------------- defaults
+
+node default_look
+  Vilja: Nothing special about it.
+
+node default_take
+  Vilja: I can't carry that.
+
+node default_use
+  Vilja: That doesn't do anything.
+
+node default_talk
+  Vilja: It doesn't answer. Out here, even the wind keeps quiet.
+
+node default_use_item
+  Vilja: That won't work.
+
+# ---------------------------------------------------------------- the camp
+
+node intro
+  Vilja: Three nights now, and not one flicker in the sky.
+  Vilja: Mummo sent word that the fox has stopped running. I came all the way north to find out what that means.
+
+node look_kota
+  Vilja: A kota of birch poles and turf, half buried in snow. Smoke curls out of the top, smelling of birch and dried fish.
+
+node take_kota
+  Vilja: It's a house, Vilja.
+
+node use_kota
+  Vilja: It's warm in there, but the fox won't be.
+
+node look_snowshoes
+  Vilja: Snowshoes, leaning against the kota. Birch frames laced with reindeer sinew.
+
+node take_snowshoes
+  [!knows_fox] Mummo: Those are mine, child! You'll ask an old woman first.
+  [knows_fox] Vilja: Mummo's snowshoes. With these I won't sink to my waist on the fell.
+  [knows_fox] give snowshoes
+
+node look_band
+  Vilja: A band of red and white wool, hung from the drying rack, woven with little figures.
+  Vilja: A bear, then a hare. A bear, then two hares. A bear, then three hares. Then a bear...
+  Vilja: ...and there the weave is frayed away.
+
+node take_band
+  Mummo: Leave that be. My mother wove it, and her mother taught her.
+
+node look_fire
+  Vilja: Mummo's fire. Birch logs, burning low and steady. The only warm light for miles.
+
+node use_fire
+  Vilja: I hold my hands to it for a moment. Better.
+
+node take_fire
+  Vilja: Not with my bare hands. I'd need something to carry an ember in.
+
+node use_box_fire
+  Vilja: I scoop a glowing ember into Mummo's birch-bark box and close the lid. It's warm against my mittens.
+  remove box
+  give ember
+  Mummo: Carry it carefully. That's a piece of my hearth, and it has never once gone out.
+
+node look_reindeer
+  [!sky_lit] Vilja: Mummo's herd, huddled together in the dark. They keep lifting their heads to sniff the wind. The wolf is out there somewhere.
+  [sky_lit] Vilja: The reindeer stand in the green light, calm again.
+
+node take_reindeer
+  Vilja: I think it would object.
+
+node talk_reindeer
+  Vilja: Hush now. The lights will come back. I promise.
+
+node look_mummo
+  Vilja: Mummo has herded reindeer on these fells for sixty winters. She keeps glancing up at the empty sky.
+
+node take_mummo
+  Mummo: Ha! I'm not a sack of flour.
+
+node talk_mummo
+  [!knows_fox] jump mummo_tale
+  Mummo: Well, child?
+  jump mummo_menu
+
+node mummo_tale
+  Mummo: Vilja! You came. Sit by the fire, quick. You've seen it? The sky?
+  Vilja: It's so dark. Not one light, the whole way here.
+  Mummo: Revontulet. The fox fires. Every winter night of my life, the fox has run across the fells, and its tail has swept the snow up into sparks.
+  Mummo: The sparks fly up and burn in the sky. That's all the lights are.
+  Mummo: But three nights ago it stopped running. Now the herd strays in the dark, and there's a wolf about.
+  Vilja: Why would the fox stop?
+  Mummo: Something has hurt it, or frightened it. Find it, child. You've always had a way with wild things.
+  Mummo: And mind: whatever you do, never whistle at the sky. Whistle at the lights, and they come down for you.
+  set knows_fox
+  Mummo: Take my snowshoes if you're going up the fell. And take this birch-bark box. If you find the fox cold, it will need fire.
+  give box
+  jump mummo_menu
+
+node mummo_menu
+  choice Where would the fox be? -> mummo_where
+  choice What's the woven band? -> mummo_band
+  [knows_snare] choice The fox is caught in Jussi's snare! -> mummo_snare
+  [fox_free !fox_lit] choice The fox is free, but it's cold. -> mummo_cold
+  choice I'll go and look. -> end
+
+node mummo_where
+  Mummo: It runs on the fell top, past the snow-figures the wind has made of the spruces.
+  Mummo: Jussi the trapper lives in the forest below the fell. If anything with fur has been up there, he'll know about it.
+
+node mummo_band
+  Mummo: My mother wove the fox's run into it, so we would never forget.
+  Mummo: Every night the fox runs past the snow-figures on the fell, and every night a little farther than the night before.
+  Mummo: And when it has run far enough, it goes to the owl, and the owl sends it up into the sky.
+  Mummo: The end of the band has worn away. But I always knew the run by heart. Until now, when it matters.
+
+node mummo_snare
+  Mummo: That Jussi! Wire on its leg, in the cold. No wonder it can't run.
+  Mummo: You'll need something sharp to cut it.
+
+node mummo_cold
+  Mummo: Then give it fire, child. There's an ember in my hearth waiting for you.
+
+# ---------------------------------------------------------------- the lake
+
+node look_hole
+  [!fished] Vilja: A fishing hole cut in the ice, skinned over with new ice. Somebody fished here before the dark came.
+  [fished] Vilja: The hole is freezing over again already.
+
+node take_hole
+  Vilja: It's a hole.
+
+node use_hole
+  Vilja: I'd need a fishing line.
+
+node look_line
+  Vilja: An old fishing line, frozen into the ice next to the hole.
+
+node take_line
+  Vilja: I work it loose from the ice. There's still a hook on the end.
+  set took_line
+  give line
+
+node use_line_hole
+  Vilja: I break the thin ice and let the line down into the black water.
+  Vilja: ...
+  Vilja: A tug! A fat whitefish, silver as the moon.
+  remove line
+  give fish
+  set fished
+
+node look_fells
+  Vilja: The fells roll away to the edge of the world, white under the stars. Somewhere up there, the fox is hiding.
+
+# ---------------------------------------------------------------- the forest
+
+node look_cabin
+  Vilja: A trapper's cabin, its roof bowed under the snow. Pelts hang drying under the eaves.
+
+node use_cabin
+  Vilja: The door's barred. Jussi doesn't seem the trusting kind.
+
+node look_snares
+  Vilja: Wire snares, dozens of them, hung in bundles on the cabin wall.
+
+node take_snares
+  Jussi: Hands off! I've counted those. Or I've tried to.
+
+node look_prints
+  Vilja: Paw prints, leading up toward the fell. Each one still holds a faint glow, like ash that hasn't quite gone out.
+
+node look_drifts
+  Vilja: The path to the fell top, buried in drifts as deep as I am tall.
+
+node walk_drifts
+  Vilja: I'd sink to my waist in this snow. I need snowshoes.
+
+node look_jussi
+  Vilja: A trapper in a wolfskin coat, counting snares on his fingers and losing count.
+
+node take_jussi
+  Jussi: Oi! Try that again and I'll set a snare for you.
+
+node talk_jussi
+  [!met_jussi] jump jussi_meet
+  Jussi: You again.
+  jump jussi_menu
+
+node jussi_meet
+  Jussi: Who's that? A girl, out alone in this dark? Mind the snares.
+  Vilja: I'm looking for the fire fox.
+  Jussi: Hah! So is every fool in Lapland. But I'm the one who nearly had it.
+  Jussi: Caught it in a snare on the fell top, three nights back. Its tail lit up the whole forest. A pelt like that would make a man as rich as a king.
+  Jussi: But it tore loose and ran off, and then the dark came down. So I'm bringing my snares in.
+  set met_jussi
+  jump jussi_menu
+
+node jussi_menu
+  [!knows_snare] choice Have you brought them all in? -> jussi_count
+  [!asked_hungry] choice You look hungry. -> jussi_hungry
+  [!puukko] choice Could I borrow your knife? -> jussi_knife
+  choice You hurt the fox! -> jussi_hurt
+  choice Goodbye. -> end
+
+node jussi_count
+  Jussi: That's what I'm trying to work out. Numbers were never my strong suit.
+  Jussi: The first day I set three snares. And every day after, I set twice as many as the day before. Four days of setting, I did.
+  Jussi: I've brought back forty-four. So, clever girl: how many did I set?
+  choice Twenty-four. -> count_24
+  choice Thirty-six. -> count_36
+  choice Forty-five. -> count_45
+  choice Forty-eight. -> count_48
+
+node count_24
+  Jussi: Twenty-four? I've got forty-four in my hands already! You're worse at sums than I am.
+  jump jussi_menu
+
+node count_36
+  Jussi: Thirty-six? But I've brought back more than that. Count it again.
+  jump jussi_menu
+
+node count_48
+  Jussi: Forty-eight? Three, then six... no, that's too many. I'm sure of it.
+  jump jussi_menu
+
+node count_45
+  Vilja: Three the first day, then six, then twelve, then twenty-four. Forty-five.
+  Jussi: Forty-five! Then one's missing.
+  Jussi: The one on the fell top. The fox tore loose... and took my snare with it. The wire must still be on its leg.
+  Vilja: The poor thing. That's why it can't run.
+  Jussi: Then it won't have gone far. It'll be holed up in its den, in the rocks on the fell top.
+  set knows_snare
+  jump jussi_menu
+
+node jussi_hungry
+  Jussi: Hungry? I haven't eaten in two days. Can't hunt in this dark. Can't see my own boots.
+  Jussi: Bring me a fish and I'd trade you nearly anything.
+  set asked_hungry
+  jump jussi_menu
+
+node jussi_knife
+  Jussi: My puukko? My grandfather's knife? Not for nothing, girl.
+  [asked_hungry] Jussi: Now if you had a fish...
+  jump jussi_menu
+
+node jussi_hurt
+  Jussi: Hurt it? I'd have made it famous! Every fur trader from here to Tornio would know my name.
+  [knows_fox] Vilja: Without the fox there are no lights, Jussi. Nobody will be trading anything in this dark.
+  [knows_fox] Jussi: ...Hm. I never thought of it like that.
+  jump jussi_menu
+
+node use_fish_jussi
+  Jussi: A fish! A fat one, too. My stomach thanks you.
+  Jussi: A fair trade, then. My puukko. Mind, it's sharp enough to cut through a snare wire.
+  remove fish
+  give puukko
+  set fed_jussi
+
+node use_line_jussi
+  Jussi: A line's no use to me without a fish on it.
+
+# ---------------------------------------------------------------- the fell top
+
+node fell_enter
+  [!seen_fell] Vilja: The top of the fell. Up here the wind has shaped the snow-laden spruces into figures.
+  [!seen_fell] Vilja: That one is a hare. That one an owl. And that one a bear, rearing up.
+  set seen_fell
+
+node look_hare
+  Vilja: A spruce so heavy with frozen snow that it looks like a hare, sitting up with its ears back.
+
+node look_owl
+  Vilja: A tall spruce wrapped in rime: an owl, its wings folded.
+
+node look_bear
+  Vilja: A great spruce bowed under the snow: a bear, rearing up on its hind legs.
+
+node take_hare
+  Vilja: It's a tree under half a ton of snow.
+
+node take_owl
+  jump take_hare
+
+node take_bear
+  jump take_hare
+
+node look_snare
+  Vilja: A snare, its peg torn half out of the snow. Caught in the broken wire: a tuft of fur that glows like an ember.
+
+node take_snare
+  Vilja: I pull the tuft of fur from the wire. It's still warm.
+  set took_fur
+  give fur
+
+node look_fur
+  Vilja: The fox's fur, glowing softly. It smells of smoke and frost.
+
+node look_sky
+  [!sky_lit] Vilja: Stars, and nothing else. The sky has never looked so empty.
+  [sky_lit] Vilja: The whole sky is burning.
+
+node look_fox
+  [!run_1] Vilja: The fox, blazing like a bonfire, waiting by the bear. It keeps looking back at me.
+  [run_1] Vilja: The fox, blazing by the hare, looking back at me. Waiting to know where next.
+
+node talk_fox
+  Vilja: Run, little fox! Which way do you go?
+  Vilja: It only looks at me. It's forgotten the way. Mummo's band tells the way, but the end is frayed.
+
+# The fox's run, from the bear: as the band goes on, a bear and then four hares, and when it
+# has run far enough, the owl. A wrong step and it trots back to the bear to start over.
+
+node walk_hare
+  [!fox_lit] jump look_hare
+  [run_4] jump run_wrong
+  [run_3] jump run_hare_4
+  [run_2] jump run_hare_3
+  [run_1] jump run_hare_2
+  jump run_hare_1
+
+node walk_owl
+  [!fox_lit] jump look_owl
+  [run_4] jump run_owl
+  jump run_wrong
+
+node walk_bear
+  [!fox_lit] jump look_bear
+  [run_1] jump run_wrong
+  Vilja: The fox is already at the bear. Where does it run next?
+
+node run_hare_1
+  set run_1
+  Vilja: The fox streaks across the snow to the hare and circles it once. Sparks fly up behind it.
+
+node run_hare_2
+  set run_2
+  Vilja: Around the hare again! Twice now. The sparks hang in the air a little longer.
+
+node run_hare_3
+  set run_3
+  Vilja: Three times around the hare. The snow is glowing where it runs.
+
+node run_hare_4
+  set run_4
+  Vilja: Four times! The fox's tail is so bright now I can hardly look at it. It's waiting for something...
+
+node run_wrong
+  clear run_1
+  clear run_2
+  clear run_3
+  clear run_4
+  Vilja: The fox stops short. Its sparks scatter and go out, and it trots back to the bear to wait.
+  Vilja: That wasn't the way. Mummo's band: a bear, then one hare, a bear, then two... it runs a little farther every night.
+
+node run_owl
+  set sky_lit
+  Vilja: The fox races up the owl-spruce, round and round, and leaps from the top of it into the sky!
+  Vilja: Its tail sweeps across the dark, and the sparks... the sparks catch.
+  Vilja: Green. Violet. Rose. The whole sky is burning!
+  choice Whistle at the lights -> whistle
+  choice Just watch -> watch
+
+node whistle
+  Vilja: I purse my lips to whistle...
+  Vilja: No. Never whistle at the sky. The lights dip low over me, as if they heard me think it.
+  jump watch
+
+node watch
+  Vilja: Far off, the reindeer bells. The herd is coming home by the light.
+  Vilja: And somewhere down in the forest, somebody yells. I think the lights came down very low over Jussi's cabin.
+  win
+
+# ---------------------------------------------------------------- the den
+
+node den_enter
+  [!fox_out] Vilja: It's dark under the rocks. Something in here is breathing.
+
+node look_roots
+  Vilja: Spruce roots, hanging through the roof of the den like an old man's beard.
+
+node look_tail
+  Vilja: Something at the back of the den, glowing faintly, like an ember under ash. A tail. It twitches.
+
+node talk_tail
+  Vilja: Shh. I won't hurt you. I've come to help.
+  Vilja: The tail curls away into the dark.
+
+node take_tail
+  Vilja: I reach into the dark... and something snaps at my mitten! It's terrified.
+
+node use_tail
+  jump take_tail
+
+node use_fur_tail
+  Vilja: I lay the glowing tuft at the back of the den and wait.
+  Vilja: A nose. A grey face. The fox creeps out to sniff at its own fur.
+  remove fur
+  set fox_out
+
+node use_puukko_tail
+  Vilja: Not with a knife! I'd only frighten it more.
+
+node look_grey
+  [fox_out !fox_free] Vilja: A fox, thin and grey as ash. Its tail hangs dull and cold. And there, cutting into its foreleg: Jussi's snare wire.
+  [fox_free] Vilja: Free of the wire, but so cold. Its tail is grey as ash. It needs fire.
+
+node take_grey
+  Vilja: It's frightened enough already.
+
+node talk_grey
+  Vilja: There now. Nobody's going to hurt you any more.
+
+node use_puukko_grey
+  [fox_free] Vilja: The wire's already off.
+  [!fox_free] Vilja: Easy... easy. I slip the knife under the wire and cut.
+  [!fox_free] Vilja: The fox flinches, but it lets me. The wire falls away.
+  [!fox_free] set fox_free
+  Vilja: But it's shivering. Its tail is cold as ash. It needs fire.
+
+node use_box_grey
+  Vilja: The box is empty. I need an ember from a fire.
+
+node use_fish_grey
+  Vilja: It sniffs the fish, but it doesn't eat. It's not hunger that's wrong with it.
+
+node use_ember_grey
+  [!fox_free] Vilja: Not while that wire is still biting its leg. It would only bolt.
+  [fox_free] jump fox_kindle
+
+node fox_kindle
+  Vilja: I open the box, blow on the ember, and hold it to the fox's tail.
+  Vilja: A spark. Then another. Then its tail bursts into flame: gold, and red, and green!
+  remove ember
+  set fox_lit
+  goto fell 196
+  Vilja: It shot out of the den like a falling star!
+  Vilja: It's stopped by the bear-spruce. It's looking back at me, waiting.
+  Vilja: Three nights in the dark... it's forgotten the way. I have to show it, the way Mummo's band tells it.

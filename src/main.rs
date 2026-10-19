@@ -96,6 +96,10 @@ struct Player {
 #[derive(Resource)]
 struct PlayerFrames(Vec<Handle<Image>>);
 
+/// Every tale's player frames, by their `player_art` prefix.
+#[derive(Resource)]
+struct PlayerArt(HashMap<String, Vec<Handle<Image>>>);
+
 /// Room units walked per frame of the walk cycle.
 const STRIDE: f32 = 4.5;
 
@@ -259,10 +263,18 @@ fn world_to_room(p: Vec2) -> Vec2 {
 }
 
 fn setup(mut commands: Commands, assets: Res<AssetServer>, levels: Res<Levels>) {
-    let frames: Vec<Handle<Image>> = std::iter::once(assets.load("chars/vilja_stand.png"))
-        .chain((0..4).map(|i| assets.load(format!("chars/vilja_walk_{i}.png"))))
-        .collect();
-    commands.insert_resource(PlayerFrames(frames.clone()));
+    // Each tale's look for the player, all loaded up front.
+    let frames = levels.0.iter().map(|level| {
+        let art = &level.story.player_art;
+        let frames = std::iter::once(assets.load(format!("{art}_stand.png")))
+            .chain((0..4).map(|i| assets.load(format!("{art}_walk_{i}.png"))))
+            .collect();
+        (art.clone(), frames)
+    });
+    let frames: HashMap<String, Vec<Handle<Image>>> = frames.collect();
+    let first = frames[&levels.0[0].story.player_art].clone();
+    commands.insert_resource(PlayerArt(frames));
+    commands.insert_resource(PlayerFrames(first.clone()));
     commands.insert_resource(GameFont(assets.load(FONT)));
     let mut voices = VoiceBank::default();
     for (name, character) in levels.0.iter().flat_map(|level| &level.story.characters) {
@@ -292,7 +304,7 @@ fn setup(mut commands: Commands, assets: Res<AssetServer>, levels: Res<Levels>) 
     ));
 
     commands.spawn((
-        Sprite { custom_size: Some(PLAYER_SIZE), ..Sprite::from_image(frames[0].clone()) },
+        Sprite { custom_size: Some(PLAYER_SIZE), ..Sprite::from_image(first[0].clone()) },
         Anchor::BOTTOM_CENTER,
         PlayerSprite,
         RenderLayers::layer(PLAYER_LAYER),
@@ -561,7 +573,9 @@ fn handle_pointer(
     let item = if right { None } else { ui.held.clone() };
     let (x, y) = room.walk_point(hotspot, player.pos.x);
     player.target = Some(Vec2::new(x, y));
-    player.pending = (verb != Verb::Walk || item.is_some()).then(|| Action::Interact {
+    // A plain click walks over, and runs the hotspot's `walk_` node if it has one.
+    let walk_node = story.0.interaction_node(Verb::Walk, None, &hotspot.id).is_some();
+    player.pending = (verb != Verb::Walk || item.is_some() || walk_node).then(|| Action::Interact {
         verb,
         item,
         target: hotspot.id.clone(),
@@ -599,8 +613,10 @@ fn start_level(
     current: Res<CurrentLevel>,
     mut end_title: Single<&mut Text, With<EndTitle>>,
     mut quit_fade: Single<&mut BackgroundColor, With<QuitFade>>,
+    art: Res<PlayerArt>,
 ) {
     let story = levels.0[current.0].story.clone();
+    commands.insert_resource(PlayerFrames(art.0[&story.player_art].clone()));
     let (room, x) = story.start.clone();
     let floor = story.room(&room).floor;
     commands.insert_resource(Game(GameState { room, ..default() }));

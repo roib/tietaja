@@ -136,7 +136,9 @@ fn spawn_menu(mut commands: Commands, assets: Res<AssetServer>, levels: Res<Leve
             Heading,
         ));
         let count = levels.0.len() as f32;
-        let (card_w, gap) = (34.0, 8.0);
+        // Two cards side by side at 34% of the width; more shrink to fit.
+        let gap = if count > 2.0 { 5.0 } else { 8.0 };
+        let card_w = ((92.0 - (count - 1.0) * gap) / count).min(34.0);
         let row_left = (100.0 - count * card_w - (count - 1.0) * gap) / 2.0;
         for (i, level) in levels.0.iter().enumerate() {
             let title = level.story.title.clone().unwrap_or_default();

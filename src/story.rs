@@ -64,6 +64,8 @@ pub struct Hotspot {
     pub conds: Vec<Cond>,
     /// Exits lead to (room, x) instead of running interaction nodes.
     pub exit: Option<(String, f32)>,
+    /// Makes its own light, so the room's light doesn't tint it.
+    pub glows: bool,
 }
 
 /// Something alive in a room: birds crossing the sky, glints on water, drifting leaves...
@@ -76,6 +78,10 @@ pub enum EffectKind {
     Smoke,
     Sparks,
     Glow,
+    Snow,
+    Aurora,
+    Spirit,
+    Streak,
 }
 
 impl EffectKind {
@@ -88,6 +94,10 @@ impl EffectKind {
             "smoke" => Self::Smoke,
             "sparks" => Self::Sparks,
             "glow" => Self::Glow,
+            "snow" => Self::Snow,
+            "aurora" => Self::Aurora,
+            "spirit" => Self::Spirit,
+            "streak" => Self::Streak,
             _ => return None,
         })
     }
@@ -226,6 +236,8 @@ pub struct Story {
     pub start: (String, f32),
     pub intro: Option<String>,
     pub ending_music: Option<String>,
+    /// The player's sprites: `<player_art>_stand.png` and `<player_art>_walk_0..3.png`.
+    pub player_art: String,
     pub characters: HashMap<String, Character>,
     pub items: Vec<Item>,
     pub rooms: Vec<Room>,
@@ -258,6 +270,7 @@ impl Story {
             start: (String::new(), 0.0),
             intro: None,
             ending_music: None,
+            player_art: "chars/vilja".to_string(),
             characters: HashMap::new(),
             items: Vec::new(),
             rooms: Vec::new(),
@@ -293,6 +306,7 @@ impl Story {
                     "ending:" => story.ending = Some(rest.to_string()),
                     "player:" => story.player = rest.to_string(),
                     "ending_music:" => story.ending_music = Some(rest.to_string()),
+                    "player_art:" => story.player_art = rest.to_string(),
                     "character" => {
                         let usage = "expected `character Name: #rrggbb [| voice <dir> <seconds per syllable>]`";
                         let (name, rest) = rest.split_once(':').ok_or_else(|| err(usage))?;
@@ -494,8 +508,13 @@ fn parse_room_line(room: &mut Room, line: &str) -> Result<(), String> {
                 frames: None,
                 conds: Vec::new(),
                 exit: None,
+                glows: false,
             };
             for field in fields {
+                if field == "glows" {
+                    hotspot.glows = true;
+                    continue;
+                }
                 let (opt, value) = field.split_once(' ').ok_or("expected `sprite`, `if` or `to`")?;
                 match opt {
                     "sprite" => hotspot.sprite = Some(value.trim().to_string()),
@@ -683,8 +702,9 @@ mod tests {
 
     const STORY: &str = include_str!("../assets/story.txt");
     const SAUNA: &str = include_str!("../assets/sauna.txt");
+    const FOX: &str = include_str!("../assets/fox.txt");
     /// Every tale, for the checks that apply to them all.
-    const STORIES: [(&str, &str); 2] = [("story.txt", STORY), ("sauna.txt", SAUNA)];
+    const STORIES: [(&str, &str); 3] = [("story.txt", STORY), ("sauna.txt", SAUNA), ("fox.txt", FOX)];
 
     fn new_game(story: &Story) -> GameState {
         GameState { room: story.start.0.clone(), ..Default::default() }
@@ -747,6 +767,8 @@ mod tests {
             paths.extend(room.hotspots.iter().flat_map(|h| h.sprite_frames()));
         }
         paths.extend(story.ending_music.clone());
+        paths.push(format!("{}_stand.png", story.player_art));
+        paths.extend((0..4).map(|i| format!("{}_walk_{i}.png", story.player_art)));
         paths.extend(story.items.iter().map(|i| i.icon.clone()));
         for voice in story.characters.values().filter_map(|c| c.voice.as_ref()) {
             paths.extend((0..VOICE_SYLLABLES).map(|i| format!("{}/{i}.ogg", voice.dir)));
@@ -971,6 +993,59 @@ mod tests {
         interact(&story, &mut s, Verb::Use, Some("vihta"), "benches");
         let said = interact(&story, &mut s, Verb::Use, Some("water"), "kiuas");
         assert!(said.iter().any(|l| l.contains("Grandfather?")));
+        assert!(s.won);
+    }
+
+    #[test]
+    fn fox_walkthrough_wins_the_game() {
+        let story = Story::parse(FOX).unwrap();
+        let mut s = new_game(&story);
+        let has = |s: &GameState, item: &str| s.inventory.iter().any(|i| i == item);
+        let walk = |s: &mut GameState, target: &str| interact(&story, s, Verb::Walk, None, target);
+        play(&story, &mut s, story.intro.as_deref().unwrap(), &[]);
+
+        // Mummo's tale, her box, and her snowshoes (only once she's been asked).
+        interact(&story, &mut s, Verb::Take, None, "snowshoes");
+        assert!(!has(&s, "snowshoes"));
+        play(&story, &mut s, "talk_mummo", &["I'll go"]);
+        assert!(has(&s, "box") && s.flags.contains("knows_fox"));
+        interact(&story, &mut s, Verb::Take, None, "snowshoes");
+        assert!(has(&s, "snowshoes"));
+
+        // Jussi's sum: three snares, doubling for four days, is 45, so one is missing.
+        play(&story, &mut s, "talk_jussi", &["Have you brought", "Forty-eight", "Have you brought", "Forty-five", "Goodbye"]);
+        assert!(s.flags.contains("knows_snare"));
+        play(&story, &mut s, "talk_jussi", &["You look hungry", "Goodbye"]);
+
+        // A fish from the lake for his puukko.
+        interact(&story, &mut s, Verb::Take, None, "line");
+        interact(&story, &mut s, Verb::Use, Some("line"), "hole");
+        interact(&story, &mut s, Verb::Use, Some("fish"), "jussi");
+        assert!(has(&s, "puukko"));
+
+        // The fur from the snare coaxes the fox out; the knife frees it; the ember lights it.
+        interact(&story, &mut s, Verb::Take, None, "snare");
+        interact(&story, &mut s, Verb::Use, Some("fur"), "tail");
+        assert!(s.flags.contains("fox_out"));
+        interact(&story, &mut s, Verb::Use, Some("ember"), "grey");
+        interact(&story, &mut s, Verb::Use, Some("box"), "fire");
+        interact(&story, &mut s, Verb::Use, Some("ember"), "grey");
+        assert!(!s.flags.contains("fox_lit"), "not with the wire still on");
+        interact(&story, &mut s, Verb::Use, Some("puukko"), "grey");
+        interact(&story, &mut s, Verb::Use, Some("ember"), "grey");
+        assert!(s.flags.contains("fox_lit"));
+        assert_eq!(s.room, "fell");
+
+        // The run, as the band goes on: from the bear, four hares, then the owl. A wrong step
+        // sends the fox back to the bear.
+        walk(&mut s, "hare");
+        walk(&mut s, "owl");
+        assert!(!s.flags.contains("run_1") && !s.won);
+        for _ in 0..4 {
+            walk(&mut s, "hare");
+        }
+        let said = play(&story, &mut s, "walk_owl", &["Whistle"]);
+        assert!(said.iter().any(|l| l.contains("Never whistle")));
         assert!(s.won);
     }
 }

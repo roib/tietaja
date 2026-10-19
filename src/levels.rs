@@ -53,8 +53,16 @@ impl Levels {
                 card: "cards/sauna.png",
                 story: parse("sauna.txt", include_str!("../assets/sauna.txt"))?,
                 intro: SAUNA_INTRO,
-                // 7 am Pacific time.
-                release: Some((1_793_455_200, "Releasing October 31, 2026 · 7 AM PT")),
+                // 6 am Pacific time.
+                release: Some((1_793_451_600, "Releasing October 31, 2026 · 6 AM PT")),
+            },
+            Level {
+                numeral: "III",
+                card: "cards/fox.png",
+                story: parse("fox.txt", include_str!("../assets/fox.txt"))?,
+                intro: FOX_INTRO,
+                // 6 am Pacific time.
+                release: Some((1_793_973_600, "Releasing November 6, 2026 · 6 AM PT")),
             },
         ]))
     }
@@ -68,6 +76,8 @@ const FIRE_INTRO: IntroDef = IntroDef {
     painting: "intro/night.png",
     painting_aspect: 1440.0 / 1280.0,
     pan: &[(0.0, 0.0), (19.0, 0.06), (27.2, 1.0)],
+    sideways: false,
+    zoom: &[],
     glows: &[Glow {
         image: "intro/ember.png",
         center: Vec2::new(160.0 / 320.0, 342.0 / 360.0),
@@ -97,6 +107,8 @@ const SAUNA_INTRO: IntroDef = IntroDef {
     painting: "intro/dusk.png",
     painting_aspect: 1440.0 / 1280.0,
     pan: &[(0.0, 1.0), (3.0, 0.985), (15.0, 0.0)],
+    sideways: false,
+    zoom: &[],
     glows: &[
         Glow {
             image: "intro/window.png",
@@ -137,6 +149,69 @@ const SAUNA_INTRO: IntroDef = IntroDef {
     title: "intro/title_sauna.png",
     flash: [1.0, 0.8, 0.58],
 };
+
+/// The polar night: down from a sky ablaze with the fox's fire to the fells and a herders'
+/// camp. The lights die away, and in the dark a single spark glimmers in the snow.
+const FOX_INTRO: IntroDef = IntroDef {
+    painting: "intro/fells.png",
+    painting_aspect: FOX_PANORAMA.1 / FOX_PANORAMA.0,
+    // Start close on the blazing sky over the fells, then sweep across to the camp.
+    pan: &[(0.0, 0.0), (2.5, 0.0), (23.0, 1.0)],
+    sideways: true,
+    zoom: &[(0.0, 1.3), (6.0, 1.18), (23.0, 1.0)],
+    glows: &[
+        Glow {
+            image: "intro/aurora.png",
+            center: Vec2::new(0.5, 60.0 / FOX_PANORAMA.1),
+            width: 1.0,
+            aspect: 120.0 / FOX_PANORAMA.0,
+            life: Life::Dies(17.0),
+        },
+        Glow {
+            image: "intro/fox_run.png",
+            center: Vec2::new(FOX_RUN.0 / FOX_PANORAMA.0, FOX_RUN.1 / FOX_PANORAMA.1),
+            width: 56.0 / FOX_PANORAMA.0,
+            aspect: 0.5,
+            life: Life::Dies(15.0),
+        },
+        Glow {
+            image: "intro/spark.png",
+            center: Vec2::new(FOX_SPARK.0 / FOX_PANORAMA.0, FOX_SPARK.1 / FOX_PANORAMA.1),
+            width: 12.0 / FOX_PANORAMA.0,
+            aspect: 1.0,
+            life: Life::Opens(26.2),
+        },
+    ],
+    wisps: &[Wisps {
+        image: "effects/smoke.png",
+        origin: Vec2::new(756.0 / FOX_PANORAMA.0, 106.0 / FOX_PANORAMA.1),
+        width: 0.008,
+        count: 10,
+        life: 8.0,
+        rise: 0.05,
+        lean: 0.02,
+        color: [0.34, 0.38, 0.5, 0.85],
+    }],
+    captions: &[
+        (3.4, 8.6, "In the north, in the long night, the sky was never dark."),
+        (9.4, 14.8, "A fox ran across the fells, and its tail set the snow alight."),
+        (15.8, 20.4, "Then one night, the fox stopped running."),
+    ],
+    hit: 28.0,
+    prompt: 33.0,
+    music: "music/intro_fox.ogg",
+    music_tail: "music/intro_fox_tail.ogg",
+    music_length: 52.0,
+    title_loop: "music/title_fox.ogg",
+    title: "intro/title_fox.png",
+    flash: [0.78, 1.0, 0.88],
+};
+
+/// The intro panorama's size, and places in it, in room units, matching INTRO_SIZE,
+/// FOX_RUN and FOX_SPARK in tools/make_fox_art.py.
+const FOX_PANORAMA: (f32, f32) = (832.0, 180.0);
+const FOX_RUN: (f32, f32) = (172.0, 104.0);
+const FOX_SPARK: (f32, f32) = (586.0, 171.0);
 
 #[cfg(test)]
 mod tests {

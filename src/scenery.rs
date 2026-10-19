@@ -1,6 +1,7 @@
 //! What a room looks like and how it moves: the painting, a sky drifting behind it, the
 //! hotspot sprites (characters breathe), and the room's effects: birds crossing the sky,
-//! glints on water, dust in sunbeams, falling leaves, chimney smoke, firelight.
+//! glints on water, dust in sunbeams, falling leaves, chimney smoke, firelight, snowfall,
+//! the northern lights and the sparks of a fire spirit.
 
 use bevy::{
     camera::{RenderTarget, ScalingMode, visibility::RenderLayers},
@@ -84,6 +85,7 @@ struct Emitter {
     index: usize,
     kind: EffectKind,
     rect: RoomRect,
+    count: u32,
     /// Seconds until the next flock of birds.
     timer: f32,
 }
@@ -107,6 +109,9 @@ struct EffectArt {
     leaf: Handle<Image>,
     glow: Handle<Image>,
     bird: [Handle<Image>; 2],
+    snow: Handle<Image>,
+    aurora: [Handle<Image>; 3],
+    streak: Handle<Image>,
 }
 
 /// Every room's art, loaded at startup and held for the whole game. Otherwise a room's
@@ -237,7 +242,7 @@ fn sync_scenery(
         let mut entity = commands.spawn((
             Sprite {
                 custom_size: Some(Vec2::new(r.w, r.h)),
-                color: Color::srgb_u8(lr, lg, lb), // in the room's light
+                color: if hotspot.glows { Color::WHITE } else { Color::srgb_u8(lr, lg, lb) }, // in the room's light
                 ..Sprite::from_image(first)
             },
             Anchor::BOTTOM_CENTER,
@@ -311,6 +316,9 @@ fn load_effect_art(mut commands: Commands, assets: Res<AssetServer>) {
             leaf: assets.load("effects/leaf.png"),
             glow: assets.load("intro/ember.png"),
             bird: [assets.load("effects/bird_0.png"), assets.load("effects/bird_1.png")],
+            snow: assets.load("effects/snow.png"),
+            aurora: [0, 1, 2].map(|i| assets.load(format!("effects/aurora_{i}.png"))),
+            streak: assets.load("effects/fox_streak.png"),
     });
 }
 
@@ -320,7 +328,9 @@ impl EffectArt {
             EffectKind::Sparkles => self.sparkle.clone(),
             EffectKind::Motes => self.mote.clone(),
             EffectKind::Smoke => self.smoke.clone(),
-            EffectKind::Sparks => self.spark.clone(),
+            EffectKind::Sparks | EffectKind::Spirit | EffectKind::Streak => self.spark.clone(),
+            EffectKind::Snow => self.snow.clone(),
+            EffectKind::Aurora => self.aurora[0].clone(),
             EffectKind::Leaves => self.leaf.clone(),
             EffectKind::Glow => self.glow.clone(),
             EffectKind::Birds => self.bird[0].clone(),
@@ -328,9 +338,14 @@ impl EffectArt {
     }
 }
 
-/// Size in room units, and depth: birds fly behind the trees, dust floats in front of everything.
-fn look(kind: EffectKind, rect: RoomRect) -> (Vec2, f32) {
+/// Size in room units, and depth: birds fly behind the trees, dust floats in front of everything,
+/// and the northern lights hang in the sky behind the painting, each curtain overlapping the next.
+fn look(kind: EffectKind, rect: RoomRect, count: u32) -> (Vec2, f32) {
     match kind {
+        EffectKind::Snow => (Vec2::splat(1.5), 2.6),
+        EffectKind::Aurora => (Vec2::new(rect.w / count.max(1) as f32 * 2.2, rect.h), -0.8),
+        EffectKind::Spirit => (Vec2::splat(1.3), 1.3),
+        EffectKind::Streak => (Vec2::splat(1.4), 1.4),
         EffectKind::Sparkles => (Vec2::splat(3.0), 0.5),
         EffectKind::Motes => (Vec2::splat(1.6), 2.5),
         EffectKind::Smoke => (Vec2::splat(5.0), 0.6),
@@ -342,10 +357,10 @@ fn look(kind: EffectKind, rect: RoomRect) -> (Vec2, f32) {
 }
 
 fn spawn_effect(commands: &mut Commands, art: &EffectArt, index: usize, effect: &Effect, rng: &mut u64) {
-    let (size, _) = look(effect.kind, effect.rect);
+    let (size, _) = look(effect.kind, effect.rect, effect.count);
     let emitter = commands
         .spawn((
-            Emitter { index, kind: effect.kind, rect: effect.rect, timer: 2.0 + next_random(rng) * 4.0 },
+            Emitter { index, kind: effect.kind, rect: effect.rect, count: effect.count, timer: 2.0 + next_random(rng) * 4.0 },
             Transform::default(),
             Visibility::default(),
             RoomEntity,
@@ -357,15 +372,31 @@ fn spawn_effect(commands: &mut Commands, art: &EffectArt, index: usize, effect: 
     }
     for i in 0..effect.count.max(1) {
         let r = effect.rect;
-        let pos = Vec2::new(r.x + next_random(rng) * r.w, r.y + next_random(rng) * r.h);
+        let mut pos = Vec2::new(r.x + next_random(rng) * r.w, r.y + next_random(rng) * r.h);
+        let (mut size, mut image, mut flip_x) = (size, art.image(effect.kind), false);
+        if effect.kind == EffectKind::Aurora {
+            // Curtains along the sky, each its own shape and size, higher or lower, so
+            // together they fold and overlap instead of standing in a row.
+            let spacing = r.w / effect.count.max(1) as f32;
+            pos = Vec2::new(r.x + (i as f32 + 0.5) * spacing + (next_random(rng) - 0.5) * spacing * 0.8, r.y + r.h * (0.35 + 0.3 * next_random(rng)));
+            size *= 0.75 + 0.6 * next_random(rng);
+            image = art.aurora[i as usize % 3].clone();
+            flip_x = next_random(rng) < 0.5;
+        }
+        if effect.kind == EffectKind::Streak && i == 0 {
+            // The fox itself leads; every other particle is a spark in its trail.
+            size = STREAK_FOX;
+            image = art.streak.clone();
+        }
         // Smoke puffs and sparks are staggered along their rise so the stream is continuous.
         let age = match effect.kind {
             EffectKind::Smoke => i as f32 / effect.count as f32 * SMOKE_LIFE,
             EffectKind::Sparks => i as f32 / effect.count as f32 * SPARK_LIFE,
+            EffectKind::Spirit => i as f32 / effect.count as f32 * SPIRIT_LIFE,
             _ => 0.0,
         };
         commands.spawn((
-            Sprite { custom_size: Some(size), color: Color::NONE, ..Sprite::from_image(art.image(effect.kind)) },
+            Sprite { custom_size: Some(size), color: Color::NONE, flip_x, ..Sprite::from_image(image) },
             Transform::from_translation(room_to_world(pos).extend(0.0)),
             Particle { pos, vel: Vec2::ZERO, age, phase: next_random(rng) * 6.28, cycle: 0 },
             ChildOf(emitter),
@@ -375,6 +406,20 @@ fn spawn_effect(commands: &mut Commands, art: &EffectArt, index: usize, effect: 
 
 const SMOKE_LIFE: f32 = 5.0;
 const SPARK_LIFE: f32 = 1.6;
+const SPIRIT_LIFE: f32 = 3.2;
+/// The fire fox's run across the sky: seconds running, then seconds before it runs again.
+const STREAK_RUN: f32 = 7.0;
+const STREAK_REST: f32 = 9.0;
+/// The running fox's size in room units (its sprite, tail and all).
+const STREAK_FOX: Vec2 = Vec2::new(36.0, 18.0);
+
+/// Where the running fox is, `u` of the way along its run: it leaps up from the bottom left
+/// of the area, climbing steeply, then levels off and races across the top and away.
+fn streak_path(r: RoomRect, u: f32) -> Vec2 {
+    let climb = (u * 1.6).min(1.0);
+    let rise = 1.0 - (1.0 - climb).powi(2);
+    Vec2::new(r.x + u * r.w, r.y + r.h * (1.0 - rise) + (u * 9.0).sin() * 1.5)
+}
 
 fn drift_sky(time: Res<Time>, mut skies: Query<(&SkyLayer, &mut Transform)>) {
     let width = ROOM_WIDTH * 2.0;
@@ -409,7 +454,7 @@ fn animate_effects(
     let t = time.elapsed_secs();
     for (emitter_entity, mut emitter, children) in &mut emitters {
         let r = emitter.rect;
-        let (size, depth) = look(emitter.kind, r);
+        let (size, depth) = look(emitter.kind, r, emitter.count);
 
         if emitter.kind == EffectKind::Birds {
             emitter.timer -= dt;
@@ -501,6 +546,76 @@ fn animate_effects(
                     transform.translation = room_to_world(p.pos).extend(depth);
                     transform.scale = Vec3::splat(scale);
                     sprite.color = Color::srgba(1.0, 0.55 + 0.35 * (1.0 - k), 0.2, alpha); // white-hot to deep orange
+                    continue;
+                }
+                EffectKind::Snow => {
+                    // Flakes drifting down, each at its own speed, swaying in the wind.
+                    let speed = 6.0 + 7.0 * (p.phase * 1.7).sin().abs();
+                    p.pos.y += speed * dt;
+                    p.pos.x += ((t * 0.9 + p.phase).sin() * 3.0 - 1.5) * dt;
+                    wrap(&mut p.pos, r);
+                    scale = 0.55 + 0.8 * (p.phase * 2.3).cos().abs();
+                    alpha = 0.55 + 0.35 * (p.phase * 3.1).sin().abs();
+                }
+                EffectKind::Aurora => {
+                    // Curtains of light: each brightens and dims in its own slow time, sways a
+                    // little and stretches, so the light seems to ripple across the sky. They
+                    // kindle one by one, spreading out from a little left of the middle (where
+                    // the fox leaps up from the owl).
+                    p.pos.x += (t * 0.25 + p.phase).sin() * 1.2 * dt;
+                    let delay = 0.8 + (p.pos.x - (r.x + r.w * 0.45)).abs() / r.w * 10.0;
+                    let kindle = ((p.age - delay) / 2.0).clamp(0.0, 1.0);
+                    alpha = 0.35 + 0.45 * ((t * 0.4 + p.phase).sin() * 0.6 + (t * 1.1 + p.phase * 2.0).sin() * 0.4).max(-0.6);
+                    alpha *= kindle * kindle * (3.0 - 2.0 * kindle);
+                    transform.translation = room_to_world(p.pos).extend(depth);
+                    transform.scale = Vec3::new(1.0 + 0.08 * (t * 0.3 + p.phase).sin(), 1.0 + 0.12 * (t * 0.5 + p.phase * 1.3).sin(), 1.0);
+                    sprite.color = Color::srgba(1.0, 1.0, 1.0, alpha);
+                    continue;
+                }
+                EffectKind::Spirit => {
+                    // Spirit-fire: sparks curling up off the fox, gold turning green as they climb.
+                    if p.age > SPIRIT_LIFE {
+                        p.age -= SPIRIT_LIFE;
+                        p.phase = next_random(&mut rng) * 6.28;
+                        p.pos = Vec2::new(r.x + r.w * next_random(&mut rng), r.y + r.h * (0.6 + 0.4 * next_random(&mut rng)));
+                    }
+                    let k = p.age / SPIRIT_LIFE;
+                    p.pos.y -= (5.0 + 4.0 * (p.phase * 2.9).sin().abs()) * dt;
+                    p.pos.x += ((t * 2.2 + p.phase).sin() * 5.0 + 1.0) * dt;
+                    alpha = (k * 8.0).min(1.0) * (1.0 - k).powf(1.2) * (0.7 + 0.3 * (t * 17.0 + p.phase).sin());
+                    transform.translation = room_to_world(p.pos).extend(depth);
+                    transform.scale = Vec3::splat(1.2 - 0.6 * k);
+                    sprite.color = Color::srgba(1.0 - 0.55 * k, 0.75 + 0.25 * k, 0.3 + 0.4 * k, alpha);
+                    continue;
+                }
+                EffectKind::Streak => {
+                    // The fox races across the sky, its trail of sparks following its path a
+                    // little behind, scattering, and turning from gold to green as they fade.
+                    let k = (p.age % (STREAK_RUN + STREAK_REST)) / STREAK_RUN;
+                    let lead = child == children[0];
+                    let lag = if lead { 0.0 } else { 0.004 + 0.12 * (p.phase / 6.28) };
+                    let u = k - lag;
+                    if !(0.0..=1.0).contains(&u) {
+                        sprite.color = Color::NONE;
+                        continue;
+                    }
+                    let here = streak_path(r, u);
+                    let ahead = streak_path(r, (u + 0.01).min(1.0));
+                    let fade = (u * 12.0).min(1.0) * ((1.0 - u) * 12.0).min(1.0);
+                    if lead {
+                        p.pos = here;
+                        transform.rotation = Quat::from_rotation_z(-(ahead.y - here.y).atan2(ahead.x - here.x));
+                        transform.translation = room_to_world(p.pos).extend(depth + 0.01);
+                        transform.scale = Vec3::splat(1.0 + 0.05 * (t * 13.0).sin());
+                        sprite.color = Color::srgba(1.0, 1.0, 1.0, fade);
+                    } else {
+                        let f = lag / 0.124;
+                        let spread = 1.0 + 6.0 * f;
+                        p.pos = here + Vec2::new((p.phase * 7.3).sin(), (p.phase * 5.1).cos() + f * 3.0) * spread;
+                        transform.translation = room_to_world(p.pos).extend(depth);
+                        transform.scale = Vec3::splat(1.3 - 0.8 * f);
+                        sprite.color = Color::srgba(1.0 - 0.55 * f, 0.8 + 0.2 * f, 0.35 + 0.35 * f, fade * (1.0 - f) * (0.7 + 0.3 * (t * 19.0 + p.phase).sin()));
+                    }
                     continue;
                 }
                 EffectKind::Glow => {

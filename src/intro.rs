@@ -30,6 +30,12 @@ pub struct IntroDef {
     /// Where the camera looks over time: (seconds, how far up the painting), where 0 shows
     /// its bottom and 1 its top. The camera eases between these.
     pub pan: &'static [(f32, f32)],
+    /// A wide panorama the camera sweeps across instead: `pan` then runs from its left
+    /// edge (0) to its right (1), and the painting fills the frame's height.
+    pub sideways: bool,
+    /// For a panorama, how close the camera is over time (1 fills the frame's height); it
+    /// eases between keyframes like the pan. Empty means 1 throughout.
+    pub zoom: &'static [(f32, f32)],
     pub glows: &'static [Glow],
     pub wisps: &'static [Wisps],
     pub captions: &'static [(f32, f32, &'static str)],
@@ -432,9 +438,20 @@ fn animate(
     frame.width = px(fw / k);
     frame.height = px(fh / k);
 
-    // Pan across the tall painting.
-    let travel = (fw * def.painting_aspect - fh).max(0.0);
-    painting.top = px(-travel * (1.0 - pan_at(def.pan, t)) / k);
+    // Pan across the painting: up or down a tall one, or along a wide panorama.
+    let painting_w = if def.sideways {
+        let zoom = if def.zoom.is_empty() { 1.0 } else { pan_at(def.zoom, t) };
+        let (ph, pw) = (fh * zoom, fh * zoom / def.painting_aspect);
+        painting.width = px(pw / k);
+        painting.height = px(ph / k);
+        painting.top = px(-(ph - fh) * 0.7 / k); // zoomed in, it keeps more of the ground than the sky
+        painting.left = px(-(pw - fw).max(0.0) * pan_at(def.pan, t) / k);
+        pw / k
+    } else {
+        let travel = (fw * def.painting_aspect - fh).max(0.0);
+        painting.top = px(-travel * (1.0 - pan_at(def.pan, t)) / k);
+        fw / k
+    };
 
     for (GlowLight(i), mut image, mut transform) in &mut glows {
         let (alpha, open) = glow_at(&def.glows[*i].life, t);
@@ -443,7 +460,6 @@ fn animate(
     }
 
     // Each puff rises from the origin, swelling, leaning with the breeze and fading.
-    let painting_w = fw / k;
     for (puff, mut image, mut node) in &mut puffs {
         let w = &def.wisps[puff.wisps];
         let age = (t / w.life + puff.phase).fract();
