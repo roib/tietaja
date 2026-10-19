@@ -2614,15 +2614,18 @@ def bucket(w, h, full="ash"):
     for y in (top + (base - top) * 0.25, top + (base - top) * 0.78):  # hoops
         stroke(d, [(w * 0.15, y), (w * 0.85, y)], (60, 44, 30), 0.07 * w, 230)
         stroke(d, [(w * 0.15, y - 0.03 * h), (w * 0.6, y - 0.03 * h)], WOOD[2], 0.02 * w, 160)
-    inside = oval(w / 2, top, w * 0.36, h * 0.07)
+    inside = oval(w / 2, top, w * 0.36, h * 0.11)
     if full == "ash":
         tone(img, inside, ASH, "sphere", light=0.05)
         for _ in range(12):
             touch(d, w / 2 + rng.uniform(-w * 0.25, w * 0.25), top + rng.uniform(-h * 0.03, h * 0.03), 0.04 * w, 0.02 * h,
                   ASH[0], 150)
     else:
-        tone(img, inside, WATER, "flat", light=0.1)
-        touch(d, w * 0.42, top - h * 0.01, w * 0.14, h * 0.015, (240, 244, 246), 220)
+        tone(img, inside, ((30, 70, 120), (70, 130, 190), (170, 214, 240)), "flat", light=0.15)
+        touch(d, w * 0.4, top - h * 0.02, w * 0.16, h * 0.025, (250, 252, 255), 240)
+        for k in range(3):  # drips running down the staves
+            x = w * (0.3 + 0.2 * k)
+            stroke(d, [(x, top + h * 0.04), (x - w * 0.01, top + h * 0.2)], (150, 200, 236), 0.025 * w, 200)
     stroke(d, curve((w * 0.16, top), (w * 0.5, top - h * 0.32), (w * 0.84, top), 10), WOOD[1], 0.05 * w, 255)  # handle
     return img
 
@@ -2661,13 +2664,14 @@ def twigs(w, h, bound=False):
     img, d = sprite(w, h)
     rng = random.Random(51 if bound else 52)
     grip = (w * 0.22, h * 0.82)
-    for k in range(9):
-        a = -0.95 + k * 0.11 + rng.uniform(-0.05, 0.05)
-        ln = rng.uniform(0.65, 0.85) * w
+    for k in range(11 if bound else 5):
+        a = (-0.95 + k * 0.09 + rng.uniform(-0.04, 0.04)) if bound else (-1.3 + k * 0.32 + rng.uniform(-0.1, 0.1))
+        a *= min(1.0, h / w)  # a wide picture (the vihta lying on the bench) fans out flatter
+        ln = rng.uniform(0.5, 0.64 if bound else 0.8) * w
         end = (grip[0] + math.cos(a) * ln, grip[1] + math.sin(a) * ln)
         start = grip if bound else (grip[0] + rng.uniform(-w * 0.08, w * 0.08), grip[1] + rng.uniform(-h * 0.05, h * 0.05))
         stroke(d, [start, end], (86, 60, 44), 0.025 * w + 0.05, 255)
-        for f in (0.45, 0.6, 0.72, 0.84, 0.95):
+        for f in ((0.4, 0.52, 0.62, 0.72, 0.82, 0.92) if bound else (0.6, 0.85)):
             lx = start[0] + (end[0] - start[0]) * f + rng.uniform(-w * 0.04, w * 0.04)
             ly = start[1] + (end[1] - start[1]) * f + rng.uniform(-h * 0.04, h * 0.04)
             col = BIRCH_LEAF[rng.randint(0, 2)]
@@ -2676,8 +2680,8 @@ def twigs(w, h, bound=False):
         stroke(d, [(grip[0] - w * 0.12, grip[1] + h * 0.1), (grip[0] + w * 0.04, grip[1] - h * 0.04)], (86, 60, 44), 0.09 * w, 255)
         for k in range(3):
             y = grip[1] + h * 0.02 - k * h * 0.035
-            stroke(d, [(grip[0] - w * 0.08 + k * w * 0.02, y + h * 0.04), (grip[0] + w * 0.02 + k * w * 0.02, y - h * 0.02)],
-                   LINEN[1], 0.035 * w, 255)
+            stroke(d, [(grip[0] - w * 0.1 + k * w * 0.02, y + h * 0.05), (grip[0] + w * 0.04 + k * w * 0.02, y - h * 0.03)],
+                   (236, 228, 206), 0.05 * w, 255)
     return img
 
 
@@ -2692,6 +2696,7 @@ def sauna_objects():
     painted_figure(lambda: coin(16, 16), "items/coin.png", 67, brushes=SMALL_BRUSHES)
     painted_figure(lambda: twigs(16, 16), "items/twigs.png", 68, brushes=SMALL_BRUSHES)
     painted_figure(lambda: twigs(16, 16, bound=True), "items/vihta.png", 69, brushes=SMALL_BRUSHES)
+    painted_figure(lambda: twigs(28, 14, bound=True), "objects/vihta.png", 70, brushes=SMALL_BRUSHES)
 
 
 def titles():

@@ -62,7 +62,8 @@ room sauna: Savusauna, the smoke sauna
   hotspot ladle: Ladle | 150 54 14 32
   hotspot bucket: Bucket | 140 104 16 16 | sprite objects/bucket.png | if !took_bucket
   hotspot feather: Feather | 262 116 8 4 | sprite objects/feather.png | if !took_feather
-  hotspot kyllikki: Old Kyllikki | 146 70 18 48 | sprite chars/kyllikki.png | if kyllikki_in_sauna
+  hotspot vihta: Vihta | 246 60 28 14 | sprite objects/vihta.png | if vihta_left
+  hotspot kyllikki: Old Kyllikki | 180 70 18 48 | sprite chars/kyllikki.png | if kyllikki_in_sauna
   exit village: Door | 0 26 22 94 | to village 39
 
 room shore: Ranta, the lake shore
@@ -290,7 +291,8 @@ node look_keeper
 node talk_keeper
   [!apologized] Vilja: Hello? I'm Vilja. Grandfather's...
   [!apologized] Keeper: Hssssss!
-  [!apologized] Vilja: It's angry. Someone has to apologise to it. Properly.
+  [!apologized !knows_amends] Vilja: It's angry with someone. Kyllikki will know what to do.
+  [!apologized knows_amends] Vilja: It won't listen to me. It's waiting for an apology, and not from me.
   [apologized] Keeper: Mm.
 
 node take_keeper
@@ -338,7 +340,8 @@ node look_bucket
 node take_bucket
   give bucket
   set took_bucket
-  Vilja: Full of ash. The keeper must have spoiled it. I'll need clean water.
+  [!knows_amends] Vilja: Full of ash. Who fills a water bucket with ash?
+  [knows_amends] Vilja: Full of ash. The keeper spoiled it. I'll need clean water for the stones.
 
 node look_feather
   Vilja: A black feather, flashing blue and green. Half under the benches.
@@ -378,9 +381,9 @@ node kyllikki_apology
   jump apology_menu
 
 node apology_menu
-  choice Just say sorry. -> apology_short
-  choice Forgive my tongue, keeper of this sauna. It won't happen again. -> apology_proper
-  choice Say it was the magpie's fault. -> apology_magpie
+  choice Just tell it you're sorry. -> apology_short
+  choice Ask its forgiveness properly, as the keeper of this sauna. -> apology_proper
+  choice Tell it the magpie said it, not you. -> apology_magpie
 
 node apology_short
   Kyllikki: Sorry.
@@ -456,8 +459,7 @@ node talk_magpie
   [!heard_magpie] Vilja: Hello, magpie. Have you been in the sauna?
   Magpie: Krrraa!
   Magpie: (in Kyllikki's voice) Thieving devil-bird! Give that back, you feathered *#@%!
-  Vilja: !
-  [!heard_magpie] Vilja: That's Kyllikki's voice. And Kyllikki's words.
+  [!heard_magpie] Vilja: That's Kyllikki's voice. And Kyllikki's words!
   set heard_magpie
 
 node take_magpie
@@ -512,3 +514,9 @@ node look_skull
 
 node talk_skull
   Vilja: Good evening, honey-paw.
+
+node look_vihta
+  Vilja: The vihta, waiting on the upper bench for the keeper.
+
+node take_vihta
+  Vilja: It's the keeper's now.

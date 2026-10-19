@@ -964,7 +964,7 @@ mod tests {
         // Kyllikki comes to the sauna, and has to say it properly.
         play(&story, &mut s, "talk_kyllikki", &["The sauna's ready"]);
         assert!(s.flags.contains("kyllikki_in_sauna"));
-        let said = play(&story, &mut s, "talk_kyllikki", &["Just say sorry", "Say it was the magpie", "Forgive my tongue"]);
+        let said = play(&story, &mut s, "talk_kyllikki", &["Just tell it", "Tell it the magpie", "Ask its forgiveness"]);
         assert!(said.iter().filter(|l| l.starts_with("Keeper: H")).count() == 2, "{said:?}");
         assert!(s.flags.contains("apologized"));
 
