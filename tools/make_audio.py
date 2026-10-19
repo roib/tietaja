@@ -59,7 +59,7 @@ def write_ogg(samples, path, quality=3, peak_level=0.9, cutoff=2200):
 
 # All music sounds this many semitones below the written notes (lower is easier on the ear).
 TRANSPOSE = -3
-NOTE = {"C": -9, "D": -7, "E": -5, "F": -4, "F#": -3, "G": -2, "A": 0, "Bb": 1, "B": 2}
+NOTE = {"C": -9, "C#": -8, "D": -7, "E": -5, "F": -4, "F#": -3, "G": -2, "A": 0, "Bb": 1, "B": 2}
 
 
 def freq(name, octave):
@@ -615,13 +615,244 @@ def title_music():
     write_ogg(reverb(track, 0.5, 0.86), "music/title.ogg", peak_level=0.45)
 
 
-if __name__ == "__main__":
-    print("music:")
+
+# ---------------------------------------------------------------- tale II: the sauna spirit
+#
+# Saturday evening by the lake. The intro in levels.rs (SAUNA_INTRO) is timed to this
+# music: its window light dies at SAUNA_WINDOW_OUT, the eyes open at SAUNA_EYES, and the
+# title lands at SAUNA_HIT.
+
+SAUNA_WINDOW_OUT = 20.2  # the hiss: the sauna's light gutters out
+SAUNA_EYES = 26.2  # two eyes open in the dark window
+SAUNA_HIT = 28.0
+SAUNA_LENGTH = 52.0
+
+
+def lapping(track, rng, gain, start=0.0, end=None, period=3.1, wrap=False):
+    """Lake water lapping at the shore: soft low noise that swells and sinks."""
+    end = end if end is not None else len(track) / SR
+    lp1 = lp2 = 0.0
+    n = len(track)
+    for i in range(int(start * SR), int(end * SR)):
+        idx = i % n if wrap else i
+        if idx >= n:
+            break
+        x = rng.uniform(-1, 1)
+        lp1 += 0.05 * (x - lp1)
+        lp2 += 0.006 * (x - lp2)
+        t = i / SR
+        swell = max(0.0, math.sin(2 * math.pi * t / period)) ** 2 * 0.8 + 0.2 * max(0.0, math.sin(2 * math.pi * t / (period * 1.7) + 1))
+        track[idx] += (lp1 - lp2) * 7 * gain * swell
+
+
+def loon(rng, base=600.0, dur=3.4):
+    """A loon's wail across the water: rising, holding, leaping up and falling away,
+    with a widening tremble at the end."""
+    shape = [(0.0, 0.82), (0.22, 1.0), (0.5, 1.02), (0.62, 1.42), (0.86, 1.38), (1.0, 1.05)]
+    n = int(dur * SR)
+    out, ph = [], 0.0
+    for i in range(n):
+        p = i / n
+        for (pa, fa), (pb, fb) in zip(shape, shape[1:]):
+            if pa <= p <= pb:
+                k = (p - pa) / (pb - pa)
+                f = base * (fa + (fb - fa) * (k * k * (3 - 2 * k)))
+                break
+        f *= 1 + (0.004 + 0.02 * max(0.0, p - 0.6)) * math.sin(2 * math.pi * 6.0 * i / SR)
+        ph += 2 * math.pi * f / SR
+        env = min(1.0, p / 0.12) * min(1.0, (1 - p) / 0.25)
+        v = math.sin(ph) + 0.32 * math.sin(2 * ph) + 0.1 * math.sin(3 * ph) + 0.03 * rng.uniform(-1, 1)
+        out.append(env * v)
+    return out
+
+
+def hiss(rng, dur=1.6, attack=0.02):
+    """Water thrown on hot stones: a sharp hiss of steam that fades."""
+    n = int(dur * SR)
+    out, prev = [], 0.0
+    for i in range(n):
+        x = rng.uniform(-1, 1)
+        hp = x - prev
+        prev = x
+        t = i / SR
+        env = min(1.0, t / attack) * math.exp(-t * 3.0 / dur)
+        out.append(hp * env)
+    return out
+
+
+def crackle(track, rng, gain, rate=3.0, wrap=True):
+    """A wood fire's crackle: sparse little pops."""
+    n = len(track)
+    t = rng.uniform(0, 0.5)
+    while t < n / SR:
+        pop = int(rng.uniform(0.002, 0.008) * SR)
+        g = gain * rng.uniform(0.3, 1.0)
+        s0 = int(t * SR)
+        for k in range(pop):
+            track[(s0 + k) % n if wrap else min(n - 1, s0 + k)] += g * rng.uniform(-1, 1) * (1 - k / pop) ** 2
+        t += rng.expovariate(rate)
+
+
+def intro_sauna():
+    rng = random.Random(81)
+    track = [0.0] * int(SAUNA_LENGTH * SR)
+    hit = SAUNA_HIT
+    # The lake, all the way through, quieter while the dread builds.
+    lapping(track, rng, 0.07, 0.0, SAUNA_WINDOW_OUT + 0.4)
+    lapping(track, rng, 0.03, SAUNA_WINDOW_OUT + 0.4, hit)
+    lapping(track, rng, 0.05, hit, SAUNA_LENGTH)
+    soft = wavetable(SOFT)
+    synth(track, 1.0, SAUNA_WINDOW_OUT - 1.0, freq("D", 2), soft, 0.05, attack=5.0, release=0.4)
+    synth(track, 2.0, SAUNA_WINDOW_OUT - 2.0, freq("A", 2), soft, 0.03, attack=6.0, release=0.4)
+    # A loon calls across the water at dusk, and again further off.
+    add_once(track, 2.6, loon(rng, 560), 0.12)
+    add_once(track, 12.4, loon(rng, 500, 3.0), 0.07)
+    # A warm kantele tune for the heated sauna on a Saturday evening.
+    beat = 0.74
+    tune = [(5, 1), (3, 1), (4, 1), (5, 2), (3, 1), (2, 1), (1, 2),
+            (3, 1), (4, 1), (5, 1), (6, 2), (5, 1), (4, 1), (3, 1), (2, 2)]
+    t = 4.0
+    for degree, beats in tune:
+        name, octv = degree_note(degree, 4)
+        add_once(track, t + rng.uniform(-0.01, 0.01), pluck(freq(name, octv), 3.0, rng, 0.42, 0.997), 0.16)
+        if degree in (1, 5):
+            add_once(track, t, pluck(freq("D", 3), 3.0, rng, 0.3, 0.998), 0.1)
+        t += beat * beats
+    # Somebody forgot: the steam hisses, the light dies, a sour low string.
+    add_once(track, SAUNA_WINDOW_OUT - 0.3, hiss(rng, 2.2), 0.32)
+    add_once(track, SAUNA_WINDOW_OUT + 0.2, pluck(freq("Bb", 1), 5.0, rng, 0.3, 0.9993), 0.22)
+    add_once(track, SAUNA_WINDOW_OUT + 0.25, pluck(freq("A", 1), 5.0, rng, 0.3, 0.9993), 0.18)
+    # Dread: a heartbeat drum quickening, a low drone and a choir swelling, steam rising.
+    drum = frame_drum(rng)
+    t, gap = 22.0, 1.25
+    while t < hit - 0.3:
+        add_once(track, t, drum, 0.2 + 0.5 * ((t - 22.0) / (hit - 22.0)) ** 1.5)
+        t += gap
+        gap = max(0.3, gap * 0.84)
+    synth(track, 21.5, hit - 21.55, freq("D", 2), soft, 0.09, attack=5.5, release=0.05)
+    for name, octv in (("D", 3), ("F", 3), ("A", 3), ("D", 4)):
+        f = freq(name, octv)
+        synth(track, 22.4, hit - 22.45, f, choir_table(f, rng, "o"), 0.06, attack=5.5, release=0.05,
+              vibrato=0.006, vib_rate=4.4 + rng.random(), rng=rng)
+    add_once(track, hit - 3.6, cymbal(rng, 3.6, 3.0), 0.2)
+    # The eyes open: a deep breath of steam and a low bell.
+    add_once(track, SAUNA_EYES - 0.1, hiss(rng, 1.4, attack=0.4), 0.14)
+    add_once(track, SAUNA_EYES, bell(rng, freq("D", 4), 3.0), 0.05)
+    # The title: drums, the full choir, a horn singing the keeper's theme, kantele above.
+    add_once(track, hit, frame_drum(rng, 0.7), 1.3)
+    add_once(track, hit + 0.03, drum, 0.8)
+    add_once(track, hit, hiss(rng, 3.0, attack=0.01), 0.22)
+    chords = [(hit, 4.2, [("D", 3), ("A", 3), ("D", 4), ("F", 4), ("A", 4)]),
+              (hit + 4.2, 3.0, [("G", 2), ("D", 3), ("G", 3), ("Bb", 3), ("D", 4)]),
+              (hit + 7.2, 3.0, [("Bb", 2), ("F", 3), ("Bb", 3), ("D", 4), ("F", 4)]),
+              (hit + 10.2, 3.0, [("A", 2), ("E", 3), ("A", 3), ("C#", 4), ("E", 4)]),
+              (hit + 13.2, 9.0, [("D", 3), ("A", 3), ("D", 4), ("F", 4), ("A", 4)])]
+    for i, (start, dur, notes) in enumerate(chords):
+        for name, octv in notes:
+            f = freq(name, octv)
+            synth(track, start, dur, f, choir_table(f, rng), 0.08, attack=0.08 if i == 0 else 0.6,
+                  release=4.0 if i == len(chords) - 1 else 0.9, vibrato=0.005, vib_rate=4.4 + rng.random(), rng=rng)
+    synth(track, hit, 20.0, freq("D", 2), wavetable(HORN), 0.15, attack=0.05, release=4.0)
+    horn = wavetable(HORN, rng)
+    theme = [(1, 2), (3, 1), (4, 1), (5, 3), (4, 1), (3, 1), (4, 1), (2, 2),
+             (5, 1), (6, 1), (7, 2), (6, 1), (5, 1), (4, 1), (5, 2),
+             (3, 1), (2, 1), (1, 1), ("7-", 1), (1, 4)]
+    beat, t = 0.6, hit + 0.6
+    for degree, beats in theme:
+        name, octv = degree_note(degree, 3)
+        f = freq(name, octv)
+        synth(track, t, beats * beat * 0.92, f, horn, 0.16, attack=0.09, release=0.35, vibrato=0.004, vib_rate=5.2)
+        add_once(track, t, pluck(freq(name, octv + 2), 2.0, rng, 0.7, 0.996), 0.18)
+        t += beats * beat
+    for bar in range(6):  # steady drums in five
+        bt = hit + 3.0 + bar * 3.0
+        add_once(track, bt, drum, 0.6)
+        add_once(track, bt + 1.8, drum, 0.38)
+    add_once(track, hit + 16.0, loon(rng, 520, 3.6), 0.06)
+    add_once(track, SAUNA_LENGTH - 4.5, pluck(freq("D", 5), 4.0, rng, 0.55, 0.998), 0.2)
+    full = reverb_once(track, 0.42, 0.86)
+    write_ogg(full, "music/intro_sauna.ogg")
+    tail = full[int((SAUNA_HIT - INTRO_SKIP_LEAD) * SR):]
+    write_ogg(tail, "music/intro_sauna_tail.ogg", peak_level=0.9 * max(map(abs, tail)) / max(map(abs, full)))
+
+
+def title_sauna():
+    """The second tale's title loop: dusk on the lake, a held chord, a loon far off."""
+    rng = random.Random(82)
+    loop = 24.0
+    track = [0.0] * int(loop * SR)
+    drone(track, freq("D", 2), 0.09)
+    drone(track, freq("A", 2), 0.05)
+    for name, octv in (("D", 3), ("A", 3), ("F", 4)):
+        f = round(freq(name, octv) * loop) / loop
+        synth(track, 0, loop, f, choir_table(f, rng, "o"), 0.026, attack=0.001, release=0.0, wrap=True)
+    lapping(track, rng, 0.06, wrap=True, period=loop / 7)
+    add(track, 7.0, loon(rng, 520, 3.4), 0.06)
+    for t, degree in ((1.0, 5), (5.0, 3), (12.0, 1), (16.5, 4), (20.0, 3)):
+        name, octv = degree_note(degree, 4)
+        add(track, t, pluck(freq(name, octv), 3.0, rng, 0.35, 0.997), 0.1)
+    write_ogg(reverb(track, 0.5, 0.86), "music/title_sauna.ogg", peak_level=0.45)
+
+
+def sauna_music():
+    """Inside the smoke sauna: a low warm drone, the fire crackling in the kiuas, and a
+    kantele picking out a slow, sleepy tune in the dark."""
+    rng = random.Random(83)
+    beat = 0.9
+    bars = 8
+    track = [0.0] * int(bars * 5 * beat * SR)
+    drone(track, freq("D", 2), 0.1, 0.25)
+    drone(track, freq("A", 2), 0.05, 0.3)
+    crackle(track, rng, 0.05, 4.0)
+    slow = [(1, 2), (0, 1), (3, 1), (2, 1), (1, 3), (0, 2), (5, 1), (4, 1), (3, 2), (0, 2),
+            (2, 1), (3, 1), (1, 2), (0, 3), ("5-", 2), (1, 3), (0, 3)]
+    t = play_melody(track, rng, slow, beat, ["D", "E", "F", "G", "A"], 4, 0.32, 0.4, brightness=0.3, decay=0.998)
+    play_melody(track, rng, slow[::2], beat * 2, ["D", "E", "F", "G", "A"], 3, 0.2, t, brightness=0.25, decay=0.998)
+    write_ogg(reverb(track, 0.25, 0.72), "music/sauna.ogg")
+
+
+def shore_music():
+    """The lake shore at sundown: a gentle kantele in a major key, water lapping, and a
+    loon calling once across the water."""
+    rng = random.Random(84)
+    scale = ["D", "E", "F#", "G", "A"]
+    beat = 0.7
+    bars = 12
+    track = [0.0] * int(bars * 5 * beat * SR)
+    lapping(track, rng, 0.06, wrap=True, period=len(track) / SR / 13)
+    evening = [(3, 1), (2, 1), (1, 2), (0, 1), (5, 1), (4, 1), (3, 2), (0, 1),
+               (2, 1), (3, 1), (4, 1), (5, 2), (4, 1), (3, 1), (2, 3), (0, 2)]
+    t = 0.0
+    while t < len(track) / SR - 6:
+        t = play_melody(track, rng, evening, beat, scale, 4, 0.3, t, brightness=0.45, decay=0.997)
+    for bar in range(bars):
+        if bar % 2 == 0:
+            strum(track, rng, bar * 5 * beat, [("D", 3), ("A", 3), ("D", 4), ("F#", 4)], 0.12, 0.04, 0.35)
+    add(track, 9.0, loon(rng, 540, 3.4), 0.05)
+    write_ogg(reverb(track, 0.42, 0.84), "music/shore.ogg")
+
+
+def sauna_tale():
+    intro_sauna()
+    title_sauna()
+    sauna_music()
+    shore_music()
+
+
+def first_tale():
     village()
     path()
     grove()
     ending()
     intro_music()
     title_music()
-    print("voices:")
-    voices()
+
+
+if __name__ == "__main__":
+    # Make everything, or only some parts: `make_audio.py sauna_tale`.
+    import sys
+
+    names = sys.argv[1:] or ["first_tale", "sauna_tale", "voices"]
+    for name in names:
+        print(f"{name}:")
+        globals()[name]()

@@ -9,6 +9,8 @@ use bevy::{
     sprite::Anchor,
 };
 
+use crate::intro::Screen;
+use crate::levels::Levels;
 use crate::story::{Effect, EffectKind, Rect as RoomRect, ROOM_HEIGHT, ROOM_WIDTH};
 use crate::{Game, StoryRes, next_random, room_to_world};
 
@@ -21,10 +23,10 @@ pub struct SceneryPlugin;
 
 impl Plugin for SceneryPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<ShownRoom>().add_systems(Startup, (load_effect_art, preload_room_art, setup_snapshot)).add_systems(
-            Update,
-            (sync_scenery, (drift_sky, breathe, animate_sprites, animate_effects, dissolve)).chain(),
-        );
+        app.init_resource::<ShownRoom>()
+            .add_systems(Startup, (load_effect_art, preload_room_art, setup_snapshot))
+            .add_systems(OnEnter(Screen::Intro), clear_scenery)
+            .add_systems(Update, (sync_scenery, (drift_sky, breathe, animate_sprites, animate_effects, dissolve)).chain());
     }
 }
 
@@ -113,15 +115,29 @@ struct EffectArt {
 #[derive(Resource)]
 struct RoomArt(#[allow(dead_code)] Vec<Handle<Image>>);
 
-fn preload_room_art(mut commands: Commands, assets: Res<AssetServer>, story: Res<StoryRes>) {
-    let story = &story.0;
-    let paths = story.rooms.iter().flat_map(|room| {
-        std::iter::once(room.background.clone())
-            .chain(room.sky.clone())
-            .chain(room.hotspots.iter().flat_map(|h| h.sprite_frames()))
+fn preload_room_art(mut commands: Commands, assets: Res<AssetServer>, levels: Res<Levels>) {
+    let stories = levels.0.iter().map(|level| &level.story);
+    let paths = stories.flat_map(|story| {
+        let rooms = story.rooms.iter().flat_map(|room| {
+            std::iter::once(room.background.clone())
+                .chain(room.sky.clone())
+                .chain(room.hotspots.iter().flat_map(|h| h.sprite_frames()))
+        });
+        rooms.chain(story.items.iter().map(|item| item.icon.clone())).collect::<Vec<_>>()
     });
-    let icons = story.items.iter().map(|item| item.icon.clone());
-    commands.insert_resource(RoomArt(paths.chain(icons).map(|path| assets.load(path)).collect()));
+    commands.insert_resource(RoomArt(paths.map(|path| assets.load(path)).collect()));
+}
+
+/// A new tale starts from a clean stage: its first room appears without a crossfade.
+fn clear_scenery(
+    mut commands: Commands,
+    mut shown_room: ResMut<ShownRoom>,
+    leftovers: Query<Entity, Or<(With<RoomEntity>, With<Dissolving>)>>,
+) {
+    shown_room.0 = None;
+    for entity in &leftovers {
+        commands.entity(entity).despawn();
+    }
 }
 
 /// Loaded, or failed to load (so a missing file doesn't hold up the game forever).

@@ -19,6 +19,8 @@
 #                                              an animated sprite has {} in its path for the frame number
 #     exit <id>: <Name> | x y w h | to <room> <x>
 #
+#   title: <Name>                            the tale's name, on the menu
+#   ending: <text>                           shown once the tale is won
 #   player: <Name>                           who the player is
 #   start: <room> <x>                        where the game begins
 #   intro: <node>                            node run when the game starts
@@ -40,6 +42,8 @@
 #   end                     stop here
 #   win                     finish the game
 
+title: The Origin of Fire
+ending: The fire is born again.
 player: Vilja
 start: village 100
 intro: intro

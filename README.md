@@ -1,6 +1,6 @@
 # Tietäjä: the origin of fire
 
-A demo game for experimenting with [Bevy](https://bevyengine.org) and [WebAssembly](https://webassembly.org): a small point-and-click adventure about how fire came to the village. It's set in Finnish folklore, and its painted rooms follow [Werner Holmberg](https://en.wikipedia.org/wiki/Werner_Holmberg)'s landscapes. It runs natively and in the browser, including on phones.
+A demo game for experimenting with [Bevy](https://bevyengine.org) and [WebAssembly](https://webassembly.org): a small point-and-click adventure in two tales. In *The Origin of Fire*, Vilja must sing a dead hearth back to life; in *The Sauna Spirit*, she must make peace with the offended keeper of the sauna. Both are set in Finnish folklore, and their painted rooms follow [Werner Holmberg](https://en.wikipedia.org/wiki/Werner_Holmberg)'s landscapes. It runs natively and in the browser, including on phones.
 
 **Play it in your browser:** https://roib.github.io/tietaja/
 
@@ -36,9 +36,9 @@ Every push to `main` builds the browser version and deploys it to GitHub Pages (
 
 ## Making the game
 
-- `assets/story.txt` holds the whole game: characters, items, rooms, hotspots and dialogue. The format is documented at the top of the file.
-- `src/`: the engine. `story.rs` parses and runs the story, `main.rs` handles rooms, the player and the UI, `scenery.rs` adds room effects, and `intro.rs` plays the title and intro.
-- `tools/make_art.py` paints the placeholder art (it needs Pillow). `tools/make_audio.py` synthesizes the kantele music and the babble voices (it needs ffmpeg). You can replace any generated file with real art or audio.
+- Each tale is one story file holding all its characters, items, rooms, hotspots and dialogue: `assets/story.txt` (the format is documented at its top) and `assets/sauna.txt`.
+- `src/`: the engine. `levels.rs` lists the tales and choreographs each one's opening, `menu.rs` is the screen where you choose a tale, `intro.rs` plays the openings, `story.rs` parses and runs a story, `main.rs` handles rooms, the player and the UI, and `scenery.rs` adds room effects and the crossfades between rooms.
+- `tools/make_art.py` paints the art (it needs Pillow). `tools/make_audio.py` synthesizes the music and the babble voices (it needs ffmpeg). Both can make just some parts, e.g. `tools/make_art.py sauna_tale`. You can replace any generated file with real art or audio.
 
 ## License
 

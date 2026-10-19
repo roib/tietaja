@@ -1,8 +1,11 @@
 mod intro;
+mod levels;
+mod menu;
 mod scenery;
 mod story;
 
 use std::collections::{HashMap, VecDeque};
+use std::sync::Arc;
 
 use bevy::{
     audio::{AudioSinkPlayback, Volume},
@@ -12,7 +15,9 @@ use bevy::{
     sprite::Anchor,
     ui_widgets::{Activate, Button, observe},
 };
-use intro::{IntroPlugin, Screen};
+use intro::{IntroPlugin, Screen, smoothstep};
+use levels::{CurrentLevel, Levels};
+use menu::MenuPlugin;
 use scenery::{PLAYER_LAYER, SceneryPlugin};
 use story::{Choice, Dialogue, GameState, ROOM_HEIGHT, ROOM_WIDTH, Step, Story, VOICE_SYLLABLES, Verb};
 
@@ -22,6 +27,8 @@ const PANEL_RATIO: f32 = 0.4;
 const WALK_SPEED: f32 = 70.0;
 const PLAYER_SIZE: Vec2 = Vec2::new(14.0, 40.0);
 const PLAYER_HEIGHT: f32 = PLAYER_SIZE.y;
+/// Seconds to fade to black after a tale is won, before the menu returns.
+const QUIT_SECONDS: f32 = 1.2;
 
 const PANEL_BG: Color = Color::srgb(0.1, 0.07, 0.05);
 /// Like a painting hung on a dark wall: a wooden frame with a gilt fillet.
@@ -40,7 +47,7 @@ const VOICE_VOLUME: f32 = 0.5;
 const MUSIC_FADE: f32 = 0.6;
 
 #[derive(Resource)]
-struct StoryRes(Story);
+struct StoryRes(Arc<Story>);
 
 /// Flags, inventory and room. The room view and inventory redraw when this changes.
 #[derive(Resource)]
@@ -53,6 +60,20 @@ struct Talk {
     line: Option<(String, String)>,
     choices: Vec<Choice>,
 }
+
+/// Leaving a won tale for the menu: how long the end card has been up, and how far into
+/// the fade to black we are once the player clicks.
+#[derive(Resource, Default)]
+struct Quit {
+    shown: f32,
+    fading: Option<f32>,
+}
+
+#[derive(Component)]
+struct QuitFade;
+
+#[derive(Component)]
+struct EndTitle;
 
 #[derive(Resource)]
 struct Ui {
@@ -151,16 +172,16 @@ struct ChoicePanel;
 struct EndCard;
 
 fn main() {
-    let story = match Story::parse(include_str!("../assets/story.txt")) {
-        Ok(story) => story,
+    let levels = match Levels::load() {
+        Ok(levels) => levels,
         Err(err) => {
             eprintln!("{err}");
             std::process::exit(1);
         }
     };
+    let story = levels.0[0].story.clone();
     let (start_room, start_x) = story.start.clone();
     let floor = story.room(&start_room).floor;
-    let talk = Talk { dialogue: story.intro.as_deref().map(Dialogue::new), ..default() };
 
     App::new()
         .add_plugins(
@@ -183,20 +204,25 @@ fn main() {
             facing_left: false,
             walked: 0.0,
         })
-        .insert_resource(talk)
+        .init_resource::<Talk>()
+        .init_resource::<Quit>()
         .insert_resource(Ui { verb: Verb::Walk, held: None, hover: None })
         .insert_resource(StoryRes(story))
+        .insert_resource(levels)
+        .init_resource::<CurrentLevel>()
         .insert_resource(SoundOn(true))
         .insert_resource(Babble { rng: 0x9E37_79B9_7F4A_7C15, ..default() })
-        .add_plugins((IntroPlugin, SceneryPlugin))
+        .add_plugins((IntroPlugin, MenuPlugin, SceneryPlugin))
         .add_systems(Startup, setup)
+        .add_systems(OnEnter(Screen::Intro), start_level)
+        .add_systems(OnExit(Screen::Playing), stop_music)
         .add_systems(Update, (apply_font, toggle_sound, play_music.run_if(in_state(Screen::Playing)), play_babble, scale_ui))
         .add_systems(
             Update,
             (
                 layout,
                 // The game itself waits until the intro is over.
-                (handle_pointer, hover_items, move_player, run_dialogue).run_if(in_state(Screen::Playing)),
+                (finish_level, handle_pointer, hover_items, move_player, run_dialogue).run_if(in_state(Screen::Playing)),
             )
                 .chain(),
         )
@@ -224,14 +250,14 @@ fn world_to_room(p: Vec2) -> Vec2 {
     Vec2::new(p.x + ROOM_WIDTH / 2.0, ROOM_HEIGHT / 2.0 - p.y)
 }
 
-fn setup(mut commands: Commands, assets: Res<AssetServer>, story: Res<StoryRes>) {
+fn setup(mut commands: Commands, assets: Res<AssetServer>, levels: Res<Levels>) {
     let frames: Vec<Handle<Image>> = std::iter::once(assets.load("chars/vilja_stand.png"))
         .chain((0..4).map(|i| assets.load(format!("chars/vilja_walk_{i}.png"))))
         .collect();
     commands.insert_resource(PlayerFrames(frames.clone()));
     commands.insert_resource(GameFont(assets.load(FONT)));
     let mut voices = VoiceBank::default();
-    for (name, character) in &story.0.characters {
+    for (name, character) in levels.0.iter().flat_map(|level| &level.story.characters) {
         if let Some(voice) = &character.voice {
             let clips = (0..VOICE_SYLLABLES).map(|i| assets.load(format!("{}/{i}.ogg", voice.dir))).collect();
             voices.0.insert(name.clone(), (clips, voice.rate));
@@ -298,9 +324,17 @@ fn setup(mut commands: Commands, assets: Res<AssetServer>, story: Res<StoryRes>)
         BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.75)),
         EndCard,
         children![
-            (Text::new("The fire is born again."), TextFont { font_size: FontSize::Px(36.0), ..default() }, TextColor(VERB_HOVER)),
-            (Text::new("End of the demo. Kiitos pelaamisesta, thanks for playing!"), TextFont { font_size: FontSize::Px(20.0), ..default() }),
+            (Text::default(), TextFont { font_size: FontSize::Px(36.0), ..default() }, TextColor(VERB_HOVER), EndTitle),
+            (Text::new("End of the tale. Kiitos pelaamisesta, thanks for playing!"), TextFont { font_size: FontSize::Px(20.0), ..default() }),
+            (Text::new("Click to choose another tale"), TextFont { font_size: FontSize::Px(18.0), ..default() }, TextColor(VERB_COLOR)),
         ],
+    ));
+    commands.spawn((
+        Node { position_type: PositionType::Absolute, width: percent(100), height: percent(100), ..default() },
+        BackgroundColor(Color::NONE),
+        GlobalZIndex(90),
+        Pickable::IGNORE,
+        QuitFade,
     ));
 
     // Bottom panel: sentence line, then verbs + inventory or dialogue choices.
@@ -547,6 +581,74 @@ fn enter_room(story: &Story, game: &mut GameState, player: &mut Player, talk: &m
         && talk.dialogue.is_none()
     {
         talk.dialogue = Some(Dialogue::new(enter.as_str()));
+    }
+}
+
+/// Set up the chosen tale from its start, as its opening begins.
+fn start_level(
+    mut commands: Commands,
+    levels: Res<Levels>,
+    current: Res<CurrentLevel>,
+    mut end_title: Single<&mut Text, With<EndTitle>>,
+    mut quit_fade: Single<&mut BackgroundColor, With<QuitFade>>,
+) {
+    let story = levels.0[current.0].story.clone();
+    let (room, x) = story.start.clone();
+    let floor = story.room(&room).floor;
+    commands.insert_resource(Game(GameState { room, ..default() }));
+    commands.insert_resource(Player {
+        pos: Vec2::new(x, (floor.0 + floor.1) / 2.0),
+        target: None,
+        pending: None,
+        facing_left: false,
+        walked: 0.0,
+    });
+    commands.insert_resource(Talk { dialogue: story.intro.as_deref().map(Dialogue::new), ..default() });
+    commands.insert_resource(Ui { verb: Verb::Walk, held: None, hover: None });
+    commands.insert_resource(Quit::default());
+    end_title.0 = story.ending.clone().unwrap_or_default();
+    quit_fade.0 = Color::NONE;
+    commands.insert_resource(StoryRes(story));
+}
+
+/// Once a tale is won and its end card has been read, a click fades back to the menu.
+#[allow(clippy::too_many_arguments)]
+fn finish_level(
+    time: Res<Time>,
+    mouse: Res<ButtonInput<MouseButton>>,
+    touches: Res<Touches>,
+    keys: Res<ButtonInput<KeyCode>>,
+    game: Res<Game>,
+    talk: Res<Talk>,
+    mut quit: ResMut<Quit>,
+    mut fade: Single<&mut BackgroundColor, With<QuitFade>>,
+    mut next: ResMut<NextState<Screen>>,
+) {
+    let dt = time.delta_secs();
+    if let Some(seconds) = quit.fading.as_mut() {
+        *seconds += dt;
+        fade.0 = Color::srgba(0.0, 0.0, 0.0, smoothstep(*seconds / QUIT_SECONDS));
+        if *seconds >= QUIT_SECONDS {
+            next.set(Screen::Menu);
+        }
+        return;
+    }
+    if !game.0.won || talk.line.is_some() || !talk.choices.is_empty() {
+        return;
+    }
+    quit.shown += dt;
+    let pressed = mouse.just_pressed(MouseButton::Left)
+        || touches.iter_just_pressed().next().is_some()
+        || keys.any_just_pressed([KeyCode::Space, KeyCode::Enter, KeyCode::Escape]);
+    // A moment to read the end card, so the click that ended the last line doesn't skip it.
+    if pressed && quit.shown > 1.0 {
+        quit.fading = Some(0.0);
+    }
+}
+
+fn stop_music(mut commands: Commands, tracks: Query<Entity, With<MusicTrack>>) {
+    for entity in &tracks {
+        commands.entity(entity).despawn();
     }
 }
 
@@ -845,6 +947,7 @@ fn play_music(
     game: Res<Game>,
     talk: Res<Talk>,
     sound: Res<SoundOn>,
+    quit: Res<Quit>,
     mut tracks: Query<(Entity, &mut MusicTrack, Option<&mut AudioSink>)>,
 ) {
     let wanted = if game.0.won && talk.line.is_none() {
@@ -869,7 +972,8 @@ fn play_music(
         let target = if track.fading_out || !sound.0 { 0.0 } else { MUSIC_VOLUME };
         track.volume += (target - track.volume).clamp(-step, step);
         if let Some(mut sink) = sink {
-            sink.set_volume(Volume::Linear(track.volume));
+            let quitting = quit.fading.map_or(1.0, |s| 1.0 - smoothstep(s / QUIT_SECONDS));
+            sink.set_volume(Volume::Linear(track.volume * quitting));
         }
         if track.fading_out && track.volume <= 0.0 {
             commands.entity(entity).despawn();

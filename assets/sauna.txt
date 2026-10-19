@@ -1,0 +1,514 @@
+# Tietäjä II: the sauna spirit
+#
+# Saturday evening, and the sauna's keeper has been offended. The file format is
+# described at the top of story.txt.
+
+title: The Sauna Spirit
+ending: The steam is sweet again.
+player: Vilja
+start: village 120
+intro: intro
+ending_music: music/ending.ogg
+
+character Vilja: #f4f0e6 | voice voices/vilja 0.075
+character Kyllikki: #f0c46a | voice voices/kyllikki 0.1
+character Magpie: #9ec3ff | voice voices/magpie 0.12
+character Keeper: #ff9c5a | voice voices/spirit 0.3
+
+item feather: Magpie feather | items/feather.png
+item bucket: Bucket of ash | items/bucket.png
+item water: Bucket of lake water | items/water.png
+item coin: Silver coin | items/coin.png
+item twigs: Birch twigs | items/twigs.png
+item vihta: Vihta | items/vihta.png
+
+room village: Kylä, on a Saturday evening
+  background: rooms/village_evening.png
+  sky: rooms/village_evening_sky.png
+  light: #ffcda8
+  music: music/village.ogg
+  effect birds: 0 8 320 40
+  effect sparkles: 100 79 76 7 | count 10
+  effect smoke: 46 50 8 14 | count 12
+  effect smoke: 150 66 6 14 | count 8
+  effect glow: 132 85 40 30
+  effect sparks: 142 79 20 26 | count 12
+  floor: 112 140
+  hotspot sauna: Sauna | 12 40 82 62
+  exit door: Sauna door | 31 74 16 28 | to sauna 34
+  hotspot house: Kyllikki's house | 180 30 124 74
+  hotspot fire: Hearth fire | 137 89 30 22 | sprite objects/fire_{}.png | frames 6 10
+  hotspot stump: Stump | 46 101 24 19
+  hotspot kyllikki: Old Kyllikki | 228 68 18 48 | sprite chars/kyllikki.png | if !kyllikki_in_sauna
+  exit shore: Down to the lake | 0 60 12 84 | to shore 290
+  exit path: Forest path | 304 60 16 84 | to path 20
+
+room sauna: Savusauna, the smoke sauna
+  background: rooms/sauna.png
+  light: #ffb48c
+  music: music/sauna.ogg
+  enter: sauna_enter
+  effect smoke: 96 28 8 32 | count 12 | if !vent_open
+  effect glow: 88 100 24 18
+  effect sparks: 94 96 12 18 | count 5
+  effect motes: 50 40 70 80 | count 22
+  floor: 118 140
+  hotspot kiuas: Kiuas | 62 60 76 60
+  hotspot benches: Benches | 170 66 150 34
+  hotspot keeper: Glowing eyes | 226 104 20 8 | sprite objects/eyes_{}.png | frames 8 4
+  hotspot window: Window | 40 28 24 20
+  hotspot vent: Smoke vent | 136 8 18 16
+  hotspot beam: Old beam | 150 18 170 14
+  hotspot ladle: Ladle | 150 54 14 32
+  hotspot bucket: Bucket | 140 104 16 16 | sprite objects/bucket.png | if !took_bucket
+  hotspot feather: Feather | 262 116 8 4 | sprite objects/feather.png | if !took_feather
+  hotspot kyllikki: Old Kyllikki | 146 70 18 48 | sprite chars/kyllikki.png | if kyllikki_in_sauna
+  exit village: Door | 0 26 22 94 | to village 39
+
+room shore: Ranta, the lake shore
+  background: rooms/shore.png
+  sky: rooms/shore_sky.png
+  light: #ffbe9a
+  music: music/shore.ogg
+  effect sparkles: 150 80 160 30 | count 18
+  effect birds: 0 6 320 40
+  floor: 116 140
+  hotspot lake: The lake | 150 74 154 40
+  hotspot jetty: Jetty | 40 98 106 34
+  hotspot coin: Something glinting | 106 108 6 6 | sprite objects/coin.png | if !took_coin
+  hotspot boat: Upturned boat | 230 100 64 26
+  hotspot reeds: Reeds | 0 98 36 24
+  hotspot shore_birch: Birch | 18 10 30 104
+  exit village: Back to the village | 304 60 16 84 | to village 20
+
+room path: Polku, the forest path
+  background: rooms/path_evening.png
+  sky: rooms/path_evening_sky.png
+  light: #ffc8a6
+  music: music/path.ogg
+  effect birds: 140 10 180 50
+  effect motes: 40 20 110 90 | count 10
+  floor: 118 140
+  hotspot spruce: Old spruce | 128 0 64 112
+  hotspot anthill: Anthill | 230 100 40 22
+  hotspot magpie: Magpie | 176 40 16 12 | sprite chars/magpie.png
+  exit village: Back to the village | 0 60 16 84 | to village 296
+  exit grove: Deeper into the forest | 304 60 16 84 | to grove 20
+
+room grove: Hiisi, the sacred grove
+  background: rooms/grove_evening.png
+  sky: rooms/grove_evening_sky.png
+  light: #ffc4a6
+  music: music/grove.ogg
+  effect leaves: 120 0 130 100 | count 6
+  effect motes: 60 10 150 100 | count 18
+  floor: 114 140
+  hotspot birch: Ancient birch | 186 0 46 114
+  hotspot stone: Offering stone | 98 98 44 24
+  hotspot skull: Bear skull | 250 56 14 12 | sprite objects/skull.png
+  exit path: Back to the path | 0 60 16 84 | to path 296
+
+# ---------------------------------------------------------------- defaults
+
+node default_look
+  Vilja: Nothing special about it.
+
+node default_take
+  Vilja: I can't carry that.
+
+node default_use
+  Vilja: That doesn't do anything.
+
+node default_talk
+  Vilja: It doesn't answer. Most things don't.
+
+node default_use_item
+  Vilja: That won't work.
+
+# ---------------------------------------------------------------- the village
+
+node intro
+  Vilja: Saturday. Kyllikki has been heating the sauna since noon.
+  Vilja: But the smoke coming out of it smells... angry. Is that possible?
+
+node look_sauna
+  [!apologized] Vilja: Grandfather built it with his own hands. The smoke seeping out of it looks sulky.
+  [apologized] Vilja: The smoke drifts out of it gently now, like a sigh.
+
+node use_sauna
+  Vilja: The door's round the front.
+
+node look_house
+  Vilja: Kyllikki's house. Warm light in the window: at least that fire's happy.
+
+node use_house
+  Vilja: Kyllikki doesn't like people in her house when she's not in it. Or when she is.
+
+node look_fire
+  Vilja: The fire I sang back to life. Still burning.
+
+node take_fire
+  Vilja: I've learned that lesson.
+
+node talk_fire
+  Vilja: Good evening, fire. You stay right there.
+
+node look_stump
+  Vilja: Kyllikki's chopping stump.
+
+node look_kyllikki
+  Vilja: Kyllikki, wrapped in her sauna towel, waiting.
+
+node take_kyllikki
+  Vilja: She'd hit me with her stick. Again.
+
+node talk_kyllikki
+  [kyllikki_in_sauna] jump kyllikki_apology
+  [!met_kyllikki] Kyllikki: There you are! The sauna's been heating since noon. Go in, go in.
+  [!met_kyllikki] Kyllikki: Young bones first, so I can have the good steam after.
+  [met_kyllikki] Kyllikki: Well? Is it sweet in there yet?
+  set met_kyllikki
+  jump kyllikki_menu
+
+node kyllikki_menu
+  choice [felt_bite !knows_amends] The steam in there bites. Something's wrong. -> kyllikki_bite
+  choice [knows_amends !knows_culprit] How do I make amends? -> kyllikki_amends
+  choice [knows_culprit water vihta] The sauna's ready. Will you come and say sorry? -> kyllikki_ready
+  choice [knows_culprit !water] Will you apologise to the keeper? -> kyllikki_refuses
+  choice [knows_culprit water !vihta] Will you apologise to the keeper? -> kyllikki_refuses
+  choice Who looks after the sauna? -> kyllikki_keeper
+  choice Goodbye. -> end
+
+node kyllikki_bite
+  Kyllikki: Bites? Löyly doesn't bite. Not unless...
+  Kyllikki: Oh, no. Somebody's upset the keeper.
+  Kyllikki: Every sauna has one, child. It lives under the benches and minds the steam.
+  Kyllikki: Upset it, and the steam turns sour. Leave it long enough and it'll burn the sauna down.
+  Vilja: How do I make it better?
+  Kyllikki: Clean water for the stones. A fresh vihta, left for the keeper to bathe with.
+  Kyllikki: And an apology from whoever offended it. Done properly, mind.
+  set knows_amends
+  jump kyllikki_menu
+
+node kyllikki_amends
+  Kyllikki: Clean water for the stones, from the lake. A fresh vihta of birch twigs.
+  Kyllikki: And whoever was rude in there has to say sorry. Find out who.
+  jump kyllikki_menu
+
+node kyllikki_keeper
+  Kyllikki: The keeper. Saunatonttu, some say. It was here before any of us.
+  Kyllikki: Some say a sauna's keeper is whoever built it, staying on after.
+  Kyllikki: Behave in the sauna as you would in church. No shouting, no fighting, no rude words.
+  jump kyllikki_menu
+
+node kyllikki_refuses
+  Kyllikki: Me? Apologise to a puff of steam?
+  Kyllikki: ...Fine. But I'm not going in until the sauna's ready. Water and a vihta, and then we'll talk.
+  jump kyllikki_menu
+
+node kyllikki_ready
+  Kyllikki: Water and a vihta. You have been busy.
+  Kyllikki: Fine. I'll come. But I'm not crawling under any bench.
+  set kyllikki_in_sauna
+  Vilja: She's gone ahead to the sauna.
+
+node use_feather_kyllikki
+  [!heard_magpie] Kyllikki: A magpie feather. So? There are magpies everywhere.
+  [!heard_magpie] end
+  Kyllikki: A magpie feather. What of it?
+  Vilja: It was under the sauna benches. And the magpie on the path says... words. In your voice.
+  Kyllikki: ...
+  Kyllikki: I may have said one or two things when that thief stole my spindle.
+  Kyllikki: In the sauna. Loudly. While I was chasing it round the stones.
+  Vilja: Kyllikki!
+  Kyllikki: The bird repeated them. That's what offended the keeper, not me.
+  Vilja: The bird only said them because you did.
+  Kyllikki: Hmph.
+  set knows_culprit
+
+node use_twigs_kyllikki
+  Kyllikki: Birch twigs! Good ones, from the old birch. Give them here.
+  Kyllikki: (binding them with a twist of yarn) There. A vihta fit for the keeper.
+  remove twigs
+  give vihta
+
+node use_water_kyllikki
+  Kyllikki: That's for the stones, not for me. I washed last Saturday.
+
+node use_bucket_kyllikki
+  Kyllikki: Ash! Tip that out somewhere and fetch clean water from the lake.
+
+node use_coin_kyllikki
+  Kyllikki: Silver? Keep it. Silver's for the spirits, not for old women.
+
+node use_vihta_kyllikki
+  Kyllikki: It's not for me, it's for the keeper. Leave it on the bench in there.
+
+# ---------------------------------------------------------------- the sauna
+
+node sauna_enter
+  [!been_in_sauna] Vilja: (coughing) The smoke's thick in here. And it stings.
+  [!been_in_sauna] Vilja: Something under the benches is watching me.
+  set been_in_sauna
+
+node look_kiuas
+  [!felt_bite] Vilja: The kiuas. A heap of stones over the fire, hot enough to make good steam.
+  [felt_bite !apologized] Vilja: The stones are hot, but the steam they give is sour.
+  [apologized] Vilja: The stones are hot and ready.
+
+node use_kiuas
+  [!felt_bite] Vilja: Just a ladle of water to see...
+  [!felt_bite] Vilja: Ow! The steam bit me! It stings like nettles!
+  [!felt_bite] Keeper: Hsssss!
+  [!felt_bite] set felt_bite
+  [!felt_bite] end
+  [!apologized] Vilja: I'm not throwing any more water on that until the keeper's calmer.
+  [apologized] Vilja: It needs clean water. From the lake.
+
+node take_kiuas
+  Vilja: They're hot stones. Very hot stones.
+
+node look_benches
+  [!vihta_left] Vilja: The benches. The upper one gets the best steam.
+  [vihta_left] Vilja: The vihta lies on the upper bench, waiting for the keeper.
+
+node use_vihta_benches
+  [!apologized] Vilja: Not yet. The keeper won't take a gift from someone it's angry with.
+  [!apologized] end
+  Vilja: (laying the vihta on the upper bench) For you, keeper. Fresh from the old birch.
+  remove vihta
+  set vihta_left
+  Keeper: ...
+
+node use_twigs_benches
+  Vilja: Loose twigs won't do. They need binding into a proper vihta.
+
+node look_keeper
+  [!apologized] Vilja: Two eyes, glowing like coals, under the benches. They don't blink when I look.
+  [apologized] Vilja: The eyes under the benches are half closed, like a contented cat's.
+
+node talk_keeper
+  [!apologized] Vilja: Hello? I'm Vilja. Grandfather's...
+  [!apologized] Keeper: Hssssss!
+  [!apologized] Vilja: It's angry. Someone has to apologise to it. Properly.
+  [apologized] Keeper: Mm.
+
+node take_keeper
+  Vilja: I am NOT putting my hand under there.
+
+node use_feather_keeper
+  Keeper: Hsss!
+  Vilja: It knows that feather.
+
+node look_window
+  Vilja: The evening sun is going down over the lake.
+
+node look_vent
+  [!vent_open] Vilja: The räppänä, the smoke vent. Someone has slid it almost shut.
+  [vent_open] Vilja: The vent's open. The smoke streams out into the evening.
+
+node use_vent
+  [vent_open] Vilja: It's open already.
+  [vent_open] end
+  Vilja: (sliding the board open) There.
+  set vent_open
+  Vilja: The smoke's thinning. I can see the ceiling again.
+
+node take_vent
+  jump use_vent
+
+node look_beam
+  [!vent_open] Vilja: There's something carved on the beam, but the smoke's too thick to read it.
+  [!vent_open] end
+  [!knows_loyly] Vilja: Grandfather's marks. He carved these when he built the sauna.
+  [!knows_loyly] Vilja: Words, cut small, as if he didn't want just anyone to read them.
+  [!knows_loyly] set knows_loyly
+  Vilja: "Ukko, father in the sky, send us honey-steam, sweet steam through the stones..."
+  Vilja: The words for löyly. The real ones.
+
+node look_ladle
+  Vilja: A wooden ladle for throwing water on the stones.
+
+node take_ladle
+  Vilja: The ladle belongs to the sauna. I'll use it here.
+
+node look_bucket
+  Vilja: The water bucket. Someone's filled it with ash.
+
+node take_bucket
+  give bucket
+  set took_bucket
+  Vilja: Full of ash. The keeper must have spoiled it. I'll need clean water.
+
+node look_feather
+  Vilja: A black feather, flashing blue and green. Half under the benches.
+
+node take_feather
+  give feather
+  set took_feather
+  Vilja: A magpie's tail feather. What was a magpie doing in here?
+
+node use_bucket_kiuas
+  Vilja: Ash on hot stones? The keeper would never forgive me.
+
+node use_water_kiuas
+  [!vihta_left] jump not_yet
+  [!knows_loyly] Vilja: Plain water won't sweeten this steam. I need the right words.
+  [!knows_loyly] end
+  Vilja: (filling the ladle) Here goes.
+  Vilja: (singing) Ukko, father in the sky, send us honey-steam, sweet steam through the stones...
+  remove water
+  Vilja: (throwing the water) ...soft as a mother's breath, warm as summer earth!
+  Keeper: Ahh.
+  Keeper: Gently, child. Gently, as I taught you.
+  Vilja: Grandfather?
+  Keeper: Mind the stones. And mind your tongue in here.
+  Kyllikki: Now THAT is löyly.
+  win
+
+node not_yet
+  [!apologized] Vilja: Not yet. It's still angry. Water alone won't calm it.
+  [apologized !vihta_left] Vilja: The keeper should have its vihta first.
+
+# Kyllikki in the sauna: the apology, which has to be said properly.
+node kyllikki_apology
+  [apologized] Kyllikki: Get on with it, child. My bones are cold.
+  [apologized] end
+  Kyllikki: Well? What do I say to a pair of eyes under a bench?
+  jump apology_menu
+
+node apology_menu
+  choice Just say sorry. -> apology_short
+  choice Forgive my tongue, keeper of this sauna. It won't happen again. -> apology_proper
+  choice Say it was the magpie's fault. -> apology_magpie
+
+node apology_short
+  Kyllikki: Sorry.
+  Keeper: Hssss!
+  Kyllikki: It didn't like that.
+  Vilja: Maybe a bit more... properly?
+  jump apology_menu
+
+node apology_magpie
+  Kyllikki: It was the magpie that said it, you know. Mostly.
+  Keeper: HSSSSS!
+  Kyllikki: Alright, alright!
+  jump apology_menu
+
+node apology_proper
+  Kyllikki: (clearing her throat) Forgive my tongue, keeper of this sauna.
+  Kyllikki: It was a bad day and a worse bird. It won't happen again.
+  Keeper: ...
+  Keeper: Mm.
+  Vilja: The eyes have gone soft. It's listening.
+  set apologized
+
+# ---------------------------------------------------------------- the shore
+
+node look_lake
+  Vilja: The lake holds the whole sunset. Clean water, as much as I want.
+
+node use_bucket_lake
+  Vilja: (tipping out the ash) Out you go.
+  Vilja: (filling the bucket) Clear lake water.
+  remove bucket
+  give water
+
+node use_water_lake
+  Vilja: It's full already.
+
+node take_lake
+  Vilja: I'd need something to carry it in.
+
+node look_jetty
+  Vilja: The old jetty. Grandfather used to dive off the end of it after the sauna.
+
+node look_coin
+  Vilja: Something's glinting between the boards of the jetty.
+
+node take_coin
+  give coin
+  set took_coin
+  Vilja: An old silver coin! It must have been there for years.
+
+node look_boat
+  Vilja: Grandfather's boat, turned over for the winter that hasn't come yet.
+
+node use_boat
+  Vilja: It needs two people to turn it over. And a reason.
+
+node look_reeds
+  Vilja: Reeds, whispering in the evening breeze.
+
+node look_shore_birch
+  Vilja: A birch leaning over the water.
+
+node take_shore_birch
+  Vilja: For the keeper's vihta, only the old birch in the grove will do.
+
+# ---------------------------------------------------------------- the path
+
+node look_magpie
+  [!heard_magpie] Vilja: The magpie, back on its branch. It's looking very pleased with itself.
+  [heard_magpie] Vilja: That bird has a terrible vocabulary.
+
+node talk_magpie
+  [!heard_magpie] Vilja: Hello, magpie. Have you been in the sauna?
+  Magpie: Krrraa!
+  Magpie: (in Kyllikki's voice) Thieving devil-bird! Give that back, you feathered *#@%!
+  Vilja: !
+  [!heard_magpie] Vilja: That's Kyllikki's voice. And Kyllikki's words.
+  set heard_magpie
+
+node take_magpie
+  Vilja: It hops just out of reach, cackling.
+
+node use_feather_magpie
+  Magpie: Krraa! (it looks offended)
+  Vilja: Fine. I'll keep it.
+
+node use_coin_magpie
+  Vilja: No. It's already got enough shiny things. And it would only learn more words.
+
+node look_spruce
+  Vilja: The old spruce, dark against the evening sky.
+
+node look_anthill
+  Vilja: The ants are carrying the last crumbs home before dark.
+
+node take_anthill
+  Vilja: The ants would be cross. Everyone's cross today.
+
+# ---------------------------------------------------------------- the grove
+
+node look_birch
+  Vilja: The ancient birch. Its twigs are the finest in the forest.
+
+node take_birch
+  [!gift_given] Vilja: (reaching for the twigs) ...
+  [!gift_given] Vilja: No. The grove gives nothing for free. I need to leave a gift first.
+  [!gift_given] end
+  [took_twigs] Vilja: I have enough twigs. Taking more would be greedy.
+  [took_twigs] end
+  give twigs
+  set took_twigs
+  Vilja: (breaking off leafy twigs) Thank you, old birch. These are for the keeper.
+
+node look_stone
+  [!gift_given] Vilja: The offering stone. A gift left in the hollow pleases the grove.
+  [gift_given] Vilja: The coin glints in the hollow of the stone.
+
+node use_coin_stone
+  remove coin
+  set gift_given
+  Vilja: (placing the coin in the hollow) Silver, for the grove. May I take a few twigs from the birch?
+  Vilja: The leaves rustle, though there's no wind. I think that's a yes.
+
+node use_feather_stone
+  Vilja: A feather's not much of a gift. Silver would be better.
+
+node look_skull
+  Vilja: The bear's skull, keeping watch over the grove.
+
+node talk_skull
+  Vilja: Good evening, honey-paw.

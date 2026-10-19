@@ -1188,9 +1188,10 @@ def ember_glow():
     save(img, "intro/ember.png")
 
 
-def title_logo():
+def title_logo(subtitle="THE ORIGIN OF FIRE", path="intro/title.png"):
     """The title: TIETÄJÄ in burnished gold with a dark outline and an inner glow, and the
-    subtitle between two thin gilt rules."""
+    subtitle between two thin gilt rules. Without a subtitle, it's the menu's logo: just
+    the name, cropped close."""
     from PIL import ImageFont
 
     def font(name, size):
@@ -1204,7 +1205,7 @@ def title_logo():
     w, h = 1600, 520
     big = font("NotoSerif-Black.ttf", 230)
     small = font("NotoSerif-Bold.ttf", 52)
-    title, subtitle = "TIETÄJÄ", "THE ORIGIN OF FIRE"
+    title = "TIETÄJÄ"
     spacing = 18
 
     def spaced(draw, text, fnt, y, fill, spacing, stroke=0, stroke_fill=None):
@@ -1241,13 +1242,16 @@ def title_logo():
     shine.putalpha(ImageChops.multiply(bevel, mask))
     out.alpha_composite(shine)
 
+    if subtitle is None:
+        save(out.crop((0, 0, w, 400)), path)
+        return
     d = ImageDraw.Draw(out)
     x0, x1 = spaced(d, subtitle, small, 340, (236, 214, 160, 255), 10, stroke=2, stroke_fill=(40, 24, 10, 255))
     for xa, xb in ((x0 - 260, x0 - 40), (x1 + 40, x1 + 260)):
         d.line([(xa, 372), (xb, 372)], fill=(220, 180, 100, 255), width=3)
         xm = xb if xa < x0 else xa
         d.polygon([(xm - 9, 372), (xm, 363), (xm + 9, 372), (xm, 381)], fill=(240, 206, 130, 255))
-    save(out, "intro/title.png")
+    save(out, path)
 
 
 # ---------------------------------------------------------------- figures and objects
@@ -1868,7 +1872,847 @@ def items():
     for frame in range(FIRE_FRAMES):
         painted_figure(lambda: fire(frame), f"objects/fire_{frame}.png", 40 + frame, brushes=SMALL_BRUSHES, rim=False)
 
-if __name__ == "__main__":
+# ---------------------------------------------------------------- tale II: the sauna spirit
+#
+# Saturday evening. The sun has just gone down behind the far shore; the sky burns rose
+# and gold over the lake and deepens to indigo overhead, and the sauna has been heating
+# since noon. Inside, it is all soot-black logs, firelight from the stove, and one beam of
+# evening light through the little window.
+
+DUSK_TOP = (14, 16, 46)  # indigo overhead
+DUSK_HIGH = (58, 46, 104)  # violet
+DUSK_ROSE = (196, 92, 104)  # the rose band
+DUSK_EMBER = (246, 132, 72)  # orange near the horizon
+DUSK_GOLD = (255, 200, 120)  # where the sun went down
+DUSK_GLAZE = (255, 150, 110)
+DUSK_SHADE = (34, 24, 58)  # evening shadows go violet
+
+
+def gradient(img, stops, y0, y1, x0=0, x1=None):
+    """Fill rows y0..y1 with colours blended between stops [(t, colour), ...], t in 0..1."""
+    x1 = W if x1 is None else x1
+    d = ImageDraw.Draw(img)
+    for y in range(int(y0), int(y1)):
+        t = (y - y0) / max(1, y1 - y0)
+        for (ta, ca), (tb, cb) in zip(stops, stops[1:]):
+            if ta <= t <= tb:
+                col = mix(ca, cb, (t - ta) / max(1e-6, tb - ta))
+                break
+        else:
+            col = stops[-1][1]
+        d.line([(x0, y), (x1, y)], fill=col + (255,))
+
+
+def dusk_sky(img, rng, horizon, sun_x, stars_layer=None, star_count=0):
+    """Afterglow: indigo overhead deepening through violet and rose to a band of orange
+    and gold, brightest just above where the sun went down."""
+    gradient(img, [(0.0, DUSK_TOP), (0.45, DUSK_HIGH), (0.72, DUSK_ROSE), (0.9, DUSK_EMBER), (1.0, DUSK_GOLD)], 0, horizon)
+    glow = Image.new("L", (W, H), 0)
+    gd = ImageDraw.Draw(glow)
+    for r in range(int(s(150)), 0, -6):  # the bright patch of sky over the set sun
+        gd.ellipse([sun_x - r * 1.6, horizon - r * 0.55, sun_x + r * 1.6, horizon + r * 0.55], fill=int(150 * (1 - r / s(150)) ** 2))
+    light = Image.new("RGBA", (W, H), (255, 214, 150, 255))
+    light.putalpha(glow.filter(ImageFilter.GaussianBlur(s(8))))
+    img.alpha_composite(light)
+    if stars_layer is not None:
+        sd = ImageDraw.Draw(stars_layer)
+        for _ in range(star_count):  # the first stars, only where the sky has darkened
+            y = rng.uniform(0, horizon * 0.62) ** 1.15 * (horizon * 0.62) ** -0.15
+            x = rng.uniform(0, W)
+            b = rng.random() ** 3.5 * (1 - y / (horizon * 0.62))
+            r = 0.6 + b * 1.8
+            sd.ellipse([x - r, y - r, x + r, y + r], fill=(240, 236, 255, int(60 + 195 * b)))
+
+
+def strata(img, rng, y0, y1, horizon, count, x0=0, x1=None, sun_x=None):
+    """Long thin evening clouds lying in bands: lit gold and rose from below by the set
+    sun, their tops in cool violet shadow."""
+    x1 = W if x1 is None else x1
+    for _ in range(count):
+        cy = rng.uniform(y0, y1)
+        length = rng.uniform(s(40), s(150))
+        cx = rng.uniform(x0 + length * 0.8, x1 - length * 0.8) if x1 - x0 > length * 1.6 else (x0 + x1) / 2
+        thick = rng.uniform(s(2), s(6)) * (0.6 + 0.7 * (cy - y0) / max(1, y1 - y0))
+        mask = Image.new("L", (W, H), 0)
+        md = ImageDraw.Draw(mask)
+        for _ in range(int(length / s(3))):
+            x = cx + max(-length * 0.7, min(length * 0.7, rng.gauss(0, length * 0.3)))
+            t = abs(x - cx) / (length * 0.75)
+            if t >= 1:
+                continue
+            rx = rng.uniform(s(6), s(18))
+            ry = thick * (1 - t) * rng.uniform(0.6, 1.2)
+            y = cy + rng.gauss(0, thick * 0.3)
+            md.ellipse([x - rx, y - ry, x + rx, y + ry], fill=255)
+        mask = mask.filter(ImageFilter.GaussianBlur(s(1.2)))
+        near = (cy / horizon) ** 3  # clouds near the horizon catch the most light
+        warm = 1.0 if sun_x is None else max(0.3, 1 - abs(cx - sun_x) / W)
+        lit = mix(mix((236, 120, 110), (255, 196, 120), near), (255, 220, 170), 0.3 * warm * near)
+        shade = mix((70, 50, 96), (130, 70, 96), near)
+        body = Image.new("RGBA", (W, H))
+        bd = ImageDraw.Draw(body)
+        for y in range(max(0, int(cy - thick * 2)), min(H, int(cy + thick * 2))):
+            f = min(1.0, max(0.0, (y - (cy - thick * 2)) / (thick * 4)))
+            bd.line([(0, y), (W, y)], fill=mix(shade, lit, f ** 0.8) + (255,))
+        body.putalpha(mask.point(lambda v: v * 230 // 255))
+        img.alpha_composite(body)
+
+
+def crescent(img, cx, cy, r):
+    """A young moon: a thin bright crescent with a soft halo."""
+    halo = Image.new("L", (W, H), 0)
+    ImageDraw.Draw(halo).ellipse([cx - r * 3, cy - r * 3, cx + r * 3, cy + r * 3], fill=60)
+    layer = Image.new("RGBA", (W, H), (255, 236, 200, 255))
+    layer.putalpha(halo.filter(ImageFilter.GaussianBlur(r * 1.6)))
+    img.alpha_composite(layer)
+    disc = Image.new("L", (W, H), 0)
+    dd = ImageDraw.Draw(disc)
+    dd.ellipse([cx - r, cy - r, cx + r, cy + r], fill=255)
+    dd.ellipse([cx - r * 0.62, cy - r * 1.12, cx + r * 1.38, cy + r * 0.88], fill=0)
+    layer = Image.new("RGBA", (W, H), (255, 246, 218, 255))
+    layer.putalpha(disc.filter(ImageFilter.GaussianBlur(1.2)))
+    img.alpha_composite(layer)
+
+
+def mirror(img, rng, top, bottom, sky_top, tint=(150, 130, 150)):
+    """Still water reflecting the sky above it, broken into soft horizontal ripples.
+    Returns the reflection, to paste again over anything painted across the water."""
+    strip = img.crop((0, sky_top, W, top)).transpose(Image.FLIP_TOP_BOTTOM).resize((W, bottom - top))
+    ripple = Image.new("RGBA", strip.size)
+    for y in range(strip.height):
+        shift = int(math.sin(y * 0.7) * (1 + y / 10) + rng.uniform(-1, 1))
+        ripple.paste(strip.crop((0, y, W, y + 1)), (shift, y))
+    ripple = ImageChops.multiply(ripple, Image.new("RGBA", ripple.size, tint + (255,)))
+    img.paste(ripple, (0, top))
+    return ripple
+
+
+def glitter(img, rng, cx, top, bottom, width, color=(255, 214, 150), count=260):
+    """The path of light the afterglow lays across the water, in short bright strokes."""
+    lay = new_layer()
+    d = Canvas(lay)
+    for _ in range(count):
+        y = rng.uniform(top, bottom)
+        f = (y - top) / max(1, bottom - top)
+        x = cx + rng.gauss(0, width * (0.3 + 0.7 * f))
+        dab(d, x, y, rng.uniform(s(1), s(4)) * (0.5 + f), rng.uniform(0.6, 1.4), color + (rng.randint(90, 220),), 0, 6)
+    paint(img, d, 0.6)
+
+
+def dusk_layer(layer, dark=(0.3, 0.22, 0.26), rim=None, rim_strength=170):
+    """Sink a daylight-painted layer into dusk: darker, warmer shadows, and the afterglow
+    catching its edges on one side (rim = (dx, dy) toward the light)."""
+    r, g, b, a = layer.split()
+    r = r.point(lambda v: int(v * dark[0]))
+    g = g.point(lambda v: int(v * dark[1]))
+    b = b.point(lambda v: int(v * dark[2]))
+    out = Image.merge("RGBA", (r, g, b, a))
+    if rim:
+        moved = Image.new("L", a.size, 0)
+        moved.paste(a, (int(-rim[0]), int(-rim[1])))
+        edge = ImageChops.subtract(a, moved).filter(ImageFilter.GaussianBlur(2))
+        light = Image.new("RGBA", a.size, (255, 150, 96, 255))
+        light.putalpha(edge.point(lambda v: v * rim_strength // 255))
+        out.alpha_composite(light)
+        out.putalpha(a)
+    return out
+
+
+INTRO_DUSK_HORIZON = 292  # room units in the 320x360 dusk scene
+DUSK_SUN_X = 92  # where the sun went down behind the far shore
+DUSK_SAUNA = (150, 214, 232, 340)  # gable x0, x1, side wall end, ground
+DUSK_WINDOW = (199, 319, 211, 326)  # the window in the gable end, where the eyes open
+DUSK_SMOKE = (183, 306)  # the roof's peak, where smoke seeps out
+
+
+def intro_dusk():
+    """The second tale's opening: from the first stars and a young moon down through the
+    afterglow to a smoke sauna on the lake shore, its window glowing (the game lights it,
+    and later puts it out)."""
+    global H
+    base_h = H
+    H = s(INTRO_HEIGHT)
+    try:
+        rng = random.Random(21)
+        img = Image.new("RGBA", (W, H))
+        horizon = s(INTRO_DUSK_HORIZON)
+        stars = new_layer()
+        dusk_sky(img, rng, horizon, s(DUSK_SUN_X), stars, 1700)
+        crescent(img, s(244), s(150), s(5))
+        strata(img, rng, s(150), horizon - s(30), horizon, 10, sun_x=s(DUSK_SUN_X))
+        strata(img, rng, horizon - s(40), horizon - s(4), horizon, 12, sun_x=s(DUSK_SUN_X))
+        open_sky = img.copy()
+        # The lake mirrors the afterglow.
+        lake_top, lake_bottom = horizon + s(3), H - s(18)
+        ripple = mirror(img, rng, lake_top, lake_bottom, horizon - (lake_bottom - lake_top), (236, 200, 210))
+        far = new_layer()
+        hills(far, rng, horizon + s(4), s(14), (60, 44, 84), 0.0)
+        treeline(far, rng, horizon + s(5), s(11), (40, 30, 56), 0.8, 0, x0=0, x1=W)
+        paint(img, dusk_layer(far, (0.42, 0.32, 0.46)))
+        img.paste(ripple.crop((0, s(5), W, ripple.height)), (0, lake_top + s(5)))  # keep the water clear
+        mist(img, rng, INTRO_DUSK_HORIZON + 8, 6, 90, 0, 320, (230, 150, 140))  # warm mist on the water
+        glitter(img, rng, s(DUSK_SUN_X), horizon + s(8), lake_bottom, s(10))
+        # Reeds standing in the shallows.
+        lay = new_layer()
+        d = ImageDraw.Draw(lay)
+        for cx in (s(30), s(118), s(276), s(312)):
+            for _ in range(60):
+                x = cx + rng.gauss(0, s(5))
+                h = rng.uniform(s(5), s(14))
+                y = lake_bottom + rng.uniform(-s(3), s(2))
+                d.line([(x, y), (x + rng.uniform(-s(1), s(1)), y - h)], fill=(20, 16, 22, 255), width=2)
+        paint(img, lay, 0.4)
+        # The near shore: dark rocks and grass, rimmed with warm light.
+        shore = new_layer()
+        d = ImageDraw.Draw(shore)
+        pts_ = [(0, H)] + [(x, lake_bottom - s(2) + math.sin(x * 0.004) * s(3) + rng.uniform(-3, 3)) for x in range(0, W + 16, 16)] + [(W, H)]
+        d.polygon(pts_, fill=(22, 18, 24, 255))
+        for _ in range(1800):
+            x, y = rng.uniform(0, W), rng.uniform(lake_bottom, H)
+            d.line([(x, y), (x + rng.uniform(-2, 2), y - rng.uniform(4, 14))], fill=vary((30, 24, 30), rng, 6), width=2)
+        paint(img, dusk_layer(shore, (1, 1, 1), rim=(-s(0.6), -s(0.6)), rim_strength=90))
+        for (x0, y0, x1, y1) in ((s(10), s(334), s(40), s(346)), (s(250), s(338), s(284), s(352)), (s(96), s(342), s(120), s(352))):
+            rocks = new_layer()
+            rock(rocks, rng, x0, y0, x1, y1, 0.3)
+            paint(img, dusk_layer(rocks, rim=(-s(0.8), -s(0.6))))
+        # The jetty, running out into the lake beside the sauna.
+        jetty = new_layer()
+        d = ImageDraw.Draw(jetty)
+        for k in range(14):
+            x = s(226) + k * s(5.4)
+            top_y = s(335) - k * s(0.42)
+            d.line([(x, top_y + s(1)), (x, top_y + s(9) - k * s(0.25))], fill=(26, 20, 22, 255), width=round(s(0.9)))  # posts
+        d.polygon([(s(222), s(336.5)), (s(304), s(329.5)), (s(304), s(332.5)), (s(222), s(341))], fill=(92, 64, 58, 255))
+        for k in range(28):
+            x = s(222) + k * s(3)
+            y = s(336.5) - k * s(0.25)
+            d.line([(x, y), (x, y + s(3.6) - k * s(0.05))], fill=(40, 28, 28, 255), width=2)
+        d.line([(s(222), s(336.5)), (s(304), s(329.5))], fill=(255, 176, 120, 255), width=3)  # the edge catching the sky
+        for k in range(14):  # their reflections, broken by ripples
+            x = s(226) + k * s(5.4)
+            y = s(343) - k * s(0.45)
+            d.line([(x, y), (x + rng.uniform(-2, 2), y + s(5))], fill=(30, 22, 30, 160), width=round(s(0.8)))
+        paint(img, jetty, 0.5)
+        # The sauna: a low log cabin, painted in daylight and sunk into dusk.
+        x0, x1, xs, ground = DUSK_SAUNA
+        building = new_layer()
+        farm_building(building, rng, x0, x1, xs, ground, 22, 11, 3, door=(155, 320, 167, 340), sooty=True)
+        paint(img, dusk_layer(building, (0.22, 0.15, 0.17), rim=(-s(0.7), -s(0.4))))
+        lay = new_layer()
+        d = ImageDraw.Draw(lay)
+        wx0, wy0, wx1, wy1 = [s(v) for v in DUSK_WINDOW]
+        d.rectangle([wx0 - s(1), wy0 - s(1), wx1 + s(1), wy1 + s(1.4)], fill=(52, 38, 34, 255))
+        d.rectangle([wx0, wy0, wx1, wy1], fill=(18, 12, 12, 255))  # dark until the game lights it
+        d.line([(s(167), s(321)), (s(167), s(339))], fill=(255, 170, 90, 255), width=2)  # firelight through the door's crack
+        paint(img, lay, 0.4)
+        mist(img, rng, DUSK_SMOKE[1] - 6, 8, 70, 168, 210, (150, 130, 140))  # smoke hanging over the roof
+        # Birches leaning over the water on the left, spruces dark on the right.
+        trees = new_layer()
+        leafy_tree(trees, rng, s(58), s(344), s(70), s(30), white_trunk=True)
+        leafy_tree(trees, rng, s(22), s(348), s(86), s(36), white_trunk=True)
+        paint(img, dusk_layer(trees, (0.2, 0.15, 0.2), rim=(-s(0.8), -s(0.5)), rim_strength=210))
+        spruces = new_layer()
+        for x, h in ((s(318), 88), (s(298), 64), (s(132), 46)):
+            spruce(spruces, rng, x, s(346), s(h), s(h * 0.32), 0.9, 0.6, 0.6)
+        paint(img, dusk_layer(spruces, (0.16, 0.13, 0.18), rim=(-s(0.6), -s(0.4)), rim_strength=130))
+        # Stars go on after the brushwork, and only on open sky.
+        covered = ImageChops.difference(open_sky.convert("RGB"), img.convert("RGB")).convert("L")
+        sky_only = covered.point(lambda v: 0 if v > 10 else 255).filter(ImageFilter.MinFilter(5))
+        img = finish(img, rng, 0.05, DUSK_GLAZE).convert("RGBA")
+        for layer in (stars.filter(ImageFilter.GaussianBlur(1.2)), stars):
+            layer.putalpha(ImageChops.multiply(layer.getchannel("A"), sky_only))
+            img.alpha_composite(layer)
+    finally:
+        H = base_h
+    save(img.convert("RGB"), "intro/dusk.png")
+
+
+def window_glow():
+    """Firelight in a small four-paned window, and the warm haze it throws around it.
+    Drawn larger than the window: the window is the middle 10/35 of the image."""
+    size = 512
+    img = Image.new("RGBA", (size, size))
+    halo = Image.new("L", (size, size), 0)
+    hd = ImageDraw.Draw(halo)
+    for r in range(size // 2, 0, -2):
+        hd.ellipse([size / 2 - r, size / 2 - r * 0.8, size / 2 + r, size / 2 + r * 0.8], fill=int(150 * (1 - r / (size / 2)) ** 2.4))
+    layer = Image.new("RGBA", (size, size), (255, 150, 70, 255))
+    layer.putalpha(halo)
+    img.alpha_composite(layer)
+    ww, wh = size * 12 / 35, size * 7 / 35
+    x0, y0 = (size - ww) / 2, (size - wh) / 2
+    pane = Image.new("RGBA", (size, size))
+    pd = ImageDraw.Draw(pane)
+    for y in range(int(y0), int(y0 + wh)):
+        t = (y - y0) / wh
+        pd.line([(x0, y), (x0 + ww, y)], fill=mix((255, 226, 150), (240, 120, 50), t) + (255,))
+    bar = size * 0.012
+    pd.rectangle([size / 2 - bar, y0, size / 2 + bar, y0 + wh], fill=(60, 30, 20, 255))
+    pd.rectangle([x0, size / 2 - bar, x0 + ww, size / 2 + bar], fill=(60, 30, 20, 255))
+    img.alpha_composite(pane.filter(ImageFilter.GaussianBlur(2)))
+    save(img, "intro/window.png")
+
+
+def eyes_image(w, h, open_=1.0, glow=1.0):
+    """Two eyes glowing like coals in the dark: almond-shaped, white-hot in the middle,
+    with a red haze around them. `open_` squeezes the lids together."""
+    img = Image.new("RGBA", (w, h))
+    halo = Image.new("L", (w, h), 0)
+    eye = Image.new("L", (w, h), 0)
+    hot = Image.new("L", (w, h), 0)
+    hd, ed, kd = ImageDraw.Draw(halo), ImageDraw.Draw(eye), ImageDraw.Draw(hot)
+    for cx in (w * 0.3, w * 0.7):
+        rx, ry = w * 0.13, h * 0.24 * open_
+        hd.ellipse([cx - rx * 1.5, h / 2 - h * 0.26, cx + rx * 1.5, h / 2 + h * 0.26], fill=int(150 * glow * max(0.25, open_)))
+        if ry > 0.5:
+            # An almond: two arcs meeting in points, the outer corners slanting up.
+            top = curve((cx - rx, h / 2 + ry * 0.2), (cx - rx * 0.1, h / 2 - ry * 1.7), (cx + rx, h / 2 - ry * 0.5), 12)
+            bottom = curve((cx + rx, h / 2 - ry * 0.5), (cx + rx * 0.1, h / 2 + ry * 1.5), (cx - rx, h / 2 + ry * 0.2), 12)
+            ed.polygon(top + bottom, fill=255)
+            kd.ellipse([cx - rx * 0.35, h / 2 - ry * 0.45, cx + rx * 0.35, h / 2 + ry * 0.45], fill=255)
+    for mask, col, blur in ((halo, (200, 50, 20), h * 0.12), (eye, (255, 120, 40), w * 0.012), (hot, (255, 236, 170), w * 0.01)):
+        layer = Image.new("RGBA", (w, h), col + (255,))
+        layer.putalpha(mask.filter(ImageFilter.GaussianBlur(blur)))
+        img.alpha_composite(layer)
+    return img
+
+
+def eyes():
+    save(eyes_image(512, 205), "intro/eyes.png")
+    # The keeper under the benches: open, glowing and dimming, and now and then a blink.
+    for frame, (open_, glow) in enumerate(((1, 1), (1, 0.92), (1, 0.84), (1, 0.9), (1, 1), (1, 0.95), (0.45, 0.8), (0.0, 0.6))):
+        save(eyes_image(s(20) * 2, s(8) * 2, open_, glow), f"objects/eyes_{frame}.png")
+
+
+def cards():
+    """The menu's painted cards: each tale's opening scene at its most telling moment."""
+    night = Image.open(ASSETS / "intro/night.png").convert("RGBA")
+    crop = night.crop((0, night.height - 960, 1280, night.height))
+    ember = Image.open(ASSETS / "intro/ember.png").convert("RGBA").resize((115, 115))
+    crop.alpha_composite(ember, (s(INTRO_EMBER[0]) - 57, s(INTRO_EMBER[1]) - (night.height - 960) - 57))
+    save(crop.convert("RGB").resize((640, 480), Image.LANCZOS), "cards/fire.png")
+    dusk = Image.open(ASSETS / "intro/dusk.png").convert("RGBA")
+    crop = dusk.crop((0, dusk.height - 960, 1280, dusk.height))
+    glow = Image.open(ASSETS / "intro/window.png").convert("RGBA").resize((141, 141))
+    wx, wy = s((DUSK_WINDOW[0] + DUSK_WINDOW[2]) / 2), s((DUSK_WINDOW[1] + DUSK_WINDOW[3]) / 2)
+    crop.alpha_composite(glow, (int(wx - 70), int(wy - (dusk.height - 960) - 70)))
+    save(crop.convert("RGB").resize((640, 480), Image.LANCZOS), "cards/sauna.png")
+
+
+# ---- rooms
+
+
+def sunset_sky_layer(path, seed, horizon=0.62, clouds=9, sun_x=0.2):
+    """A drifting evening sky, twice the room's width: indigo overhead, through rose to
+    gold at the horizon, with long thin clouds lit from below. Clouds keep away from the
+    ends, so the sky tiles as it scrolls."""
+    global W
+    base = W
+    W = base * 2
+    try:
+        rng = random.Random(seed)
+        img = Image.new("RGBA", (W, H))
+        hz = int(H * horizon)
+        gradient(img, [(0.0, (40, 40, 96)), (0.4, (92, 62, 120)), (0.7, (214, 104, 106)), (0.88, (250, 146, 84)),
+                       (1.0, DUSK_GOLD)], 0, hz)
+        gradient(img, [(0.0, DUSK_GOLD), (1.0, (255, 210, 150))], hz, H)
+        for copy in (0, base):  # the bright patch over the set sun, once in each half so it tiles
+            glow = Image.new("L", (W, H), 0)
+            gd = ImageDraw.Draw(glow)
+            sx = copy + base * sun_x
+            for r in range(int(s(110)), 0, -6):
+                gd.ellipse([sx - r * 1.5, hz - r * 0.5, sx + r * 1.5, hz + r * 0.5], fill=int(130 * (1 - r / s(110)) ** 2))
+            light = Image.new("RGBA", (W, H), (255, 220, 160, 255))
+            light.putalpha(glow.filter(ImageFilter.GaussianBlur(s(6))))
+            img.alpha_composite(light)
+        strata(img, rng, H * 0.12, hz - s(4), hz, clouds, x0=s(70), x1=W - s(70))
+        img = oil_paint(img, rng)
+        img.alpha_composite(Image.new("RGBA", (W, H), DUSK_GLAZE + (20,)))
+    finally:
+        W = base
+    save(img.convert("RGB"), path)
+
+
+def evening(src, dst, window=None, sun=(-40, 100)):
+    """Repaint a dawn room as Saturday evening: the light warmer and lower, the shadows
+    violet. Its sky is cut out, so an evening sky drifts behind it."""
+    img = Image.open(ASSETS / src).convert("RGBA")
+    r, g, b, a = img.split()
+    lum = img.convert("L")
+    r = r.point(lambda v: clamp(v * 0.96))
+    g = g.point(lambda v: clamp(v * 0.74))
+    b = b.point(lambda v: clamp(v * 0.62))
+    warm = Image.merge("RGBA", (r, g, b, a))
+    shade = Image.new("RGBA", img.size, DUSK_SHADE + (255,))
+    shade.putalpha(lum.point(lambda v: int(110 * (1 - v / 255) ** 1.4)))
+    warm.alpha_composite(shade)
+    glow = new_layer()
+    pool(glow, sun[0], sun[1], 200, 70, 70, (255, 140, 80))  # the last of the sun, low on one side
+    warm.alpha_composite(glow)
+    if window:  # a lit window: the hearth fire burns inside
+        lay = new_layer()
+        d = ImageDraw.Draw(lay)
+        x0, y0, x1, y1 = [s(v) for v in window]
+        d.rectangle([x0, y0, x1, y1], fill=(255, 196, 110, 255))
+        d.line([((x0 + x1) / 2, y0), ((x0 + x1) / 2, y1)], fill=(120, 70, 40, 255), width=round(s(0.5)))
+        d.line([(x0, (y0 + y1) / 2), (x1, (y0 + y1) / 2)], fill=(120, 70, 40, 255), width=round(s(0.5)))
+        warm.alpha_composite(lay)
+        halo = new_layer()
+        pool(halo, (window[0] + window[2]) / 2, (window[1] + window[3]) / 2, 14, 10, 90, (255, 150, 70))
+        warm.alpha_composite(halo)
+    warm.putalpha(a)
+    save(warm, dst)
+
+
+def soot_logs(img, rng, x0, y0, x1, y1, log_h=7.0):
+    """A smoke sauna's walls: round logs blackened glossy with a century of soot, the
+    sheen picking up whatever light there is."""
+    lay = new_layer()
+    d = Canvas(lay)
+    y = y0
+    while y < y1:
+        for py in range(int(s(log_h))):
+            t = py / s(log_h)
+            b = log_shade(t, 0.3)
+            col = mix((14, 11, 10), (58, 42, 34), max(0.0, b - 0.35))
+            d.line([(s(x0), s(y) + py), (s(x1), s(y) + py)], fill=col + (255,), width=1)
+        d.line([(s(x0), s(y + log_h) - 2), (s(x1), s(y + log_h) - 2)], fill=(6, 5, 5, 255), width=3)
+        for _ in range(int((x1 - x0) / 5)):  # glossy streaks of soot, and grain
+            gx = rng.uniform(x0, x1)
+            gy = y + log_h * rng.uniform(0.18, 0.4)
+            dab(d, s(gx), s(gy), rng.uniform(s(2), s(9)), rng.uniform(1, 2.2), (96, 70, 54, rng.randint(40, 110)), 0, 6)
+        y += log_h
+    paint(img, d, 0.5)
+
+
+def stone_heap(img, rng, cx, base, rx, height, fire=(0, 0)):
+    """The kiuas: a domed heap of rounded stones of every size, black with soot near the
+    top and grey below, each lit faintly from the window on its upper left and red-gold
+    from the fire underneath, more strongly the closer it is (room units)."""
+    stones = []
+    for _ in range(int(rx * height / 10)):
+        u = rng.uniform(-1, 1)
+        top = base - height * (1 - u * u) ** 0.55
+        x = cx + u * rx
+        y = rng.uniform(top + 1.5, base - 1)
+        stones.append((x, y, rng.uniform(3.0, 6.8) * (0.75 + 0.35 * (y - top) / max(1, base - top))))
+    stones.sort(key=lambda st: st[1])
+    lay = new_layer()
+    d = Canvas(lay)
+    for x, y, r in stones:
+        heat = max(0.0, 1 - math.hypot(x - fire[0], (y - fire[1]) * 1.4) / 34) ** 1.6
+        soot = max(0.0, 1 - (base - y) / height * 1.4)  # 0 near the top: sooty black
+        body = mix((40, 34, 32), (128, 116, 102), (0.35 + 0.65 * soot) * rng.uniform(0.55, 1.0))
+        X, Y, R = s(x), s(y), s(r)
+        d.ellipse([X - R, Y - R * 0.82, X + R, Y + R * 0.82], fill=body + (255,))
+        d.soft("ellipse", [X - R * 0.85, Y - R * 0.75, X + R * 0.2, Y - R * 0.05], fill=mix(body, (190, 170, 150), 0.35) + (110,))
+        d.soft("ellipse", [X - R * 0.7, Y - R * 0.05, X + R * 0.9, Y + R * 0.8],
+               fill=mix(body, (255, 120, 50), 0.15 + 0.75 * heat) + (int(70 + 170 * heat),))
+        if rng.random() < 0.3:  # a few catch a glint
+            d.soft("ellipse", [X - R * 0.5, Y - R * 0.6, X - R * 0.2, Y - R * 0.45], fill=(230, 190, 160, 70))
+        d.soft("arc", [X - R, Y - R * 0.82, X + R, Y + R * 0.82], 20, 160, fill=(6, 4, 4, 160), width=2)
+    paint(img, d, 0.5)
+
+
+def fire_mouth(img, rng, x0, y0, x1, y1):
+    """The kiuas's firebox mouth: an arch of stones, and inside it glowing coals, burning
+    logs and tongues of flame (room units)."""
+    lay = new_layer()
+    d = ImageDraw.Draw(lay)
+    cx = (x0 + x1) / 2
+    d.chord([s(x0), s(y0), s(x1), s(y1 + (y1 - y0))], 180, 360, fill=(12, 8, 6, 255))
+    d.rectangle([s(x0), s((y0 + y1) / 2), s(x1), s(y1)], fill=(12, 8, 6, 255))
+    glow = Image.new("RGBA", (W, H))
+    gd = ImageDraw.Draw(glow)
+    for r in range(int(s((x1 - x0) / 2)), 0, -2):
+        t = r / s((x1 - x0) / 2)
+        gd.ellipse([s(cx) - r, s(y1) - r * 0.9, s(cx) + r, s(y1) + r * 0.5], fill=mix((255, 240, 180), (170, 40, 10), t) + (255,))
+    mask = Image.new("L", (W, H), 0)
+    md = ImageDraw.Draw(mask)
+    md.chord([s(x0 + 1), s(y0 + 1), s(x1 - 1), s(y1 + (y1 - y0))], 180, 360, fill=255)
+    md.rectangle([s(x0 + 1), s((y0 + y1) / 2), s(x1 - 1), s(y1)], fill=255)
+    glow.putalpha(mask)
+    lay.alpha_composite(glow)
+    p = Painter(lay)
+    for k in range(7):  # flames licking up from the logs
+        x = x0 + 3 + k * (x1 - x0 - 6) / 6
+        h = (y1 - y0) * rng.uniform(0.35, 0.7) * (1 - abs(k - 3) / 5)
+        w = rng.uniform(1.2, 2.0)
+        left = curve((x - w, y1 - 1.5), (x - w * 0.6, y1 - 1.5 - h * 0.5), (x + rng.uniform(-1, 1), y1 - 1.5 - h), 6)
+        right = curve(left[-1], (x + w * 0.7, y1 - 1.5 - h * 0.45), (x + w, y1 - 1.5), 6)
+        p.polygon([(s(a), s(b)) for a, b in left + right], fill=(255, 210, 120, 220))
+    for xa, xb, ya, yb in ((x0 + 2, x1 - 4, y1 - 1, y1 - 2.4), (x0 + 4, x1 - 2, y1 - 2.6, y1 - 0.8)):  # logs
+        d.line([(s(xa), s(ya)), (s(xb), s(yb))], fill=(30, 14, 10, 255), width=round(s(1.6)))
+        d.line([(s(xa), s(ya) - s(0.7)), (s(xb), s(yb) - s(0.7))], fill=(255, 140, 60, 255), width=round(s(0.4)))
+    for a in range(9):  # the arch's stones
+        ang = math.pi + math.pi * a / 8
+        X = s(cx) + math.cos(ang) * s((x1 - x0) / 2 + 1.6)
+        Y = s(y1) + math.sin(ang) * s(y1 - y0 + 1.2)
+        d.ellipse([X - s(2.4), Y - s(1.8), X + s(2.4), Y + s(1.8)], fill=(58, 44, 38, 255))
+        d.ellipse([X - s(1.8), Y - s(0.2), X + s(1.8), Y + s(1.6)], fill=(170, 80, 40, 255))
+    paint(img, lay, 0.4)
+
+
+def sauna_interior():
+    """Inside the smoke sauna: soot-black log walls, the stone heap of the kiuas with its
+    fire glowing in the mouth, stepped benches on the right with darkness underneath,
+    the old beam above them, and a shaft of evening light from the little window."""
+    rng = random.Random(22)
+    img = Image.new("RGBA", (W, H), (10, 8, 8, 255))
+    soot_logs(img, rng, 0, 0, 320, 120)
+    # Ceiling boards sloping away at the top.
+    lay = new_layer()
+    d = ImageDraw.Draw(lay)
+    d.polygon([(0, 0), (W, 0), (W, s(10)), (0, s(14))], fill=(8, 6, 6, 255))
+    for k in range(40):
+        x = k * s(8)
+        d.line([(x, 0), (x + s(2), s(13))], fill=(22, 16, 14, 255), width=2)
+    paint(img, lay, 0.6)
+    # The floor: wide boards, damp, catching the fire.
+    lay = new_layer()
+    d = ImageDraw.Draw(lay)
+    for y in range(s(118), H):
+        t = (y - s(118)) / (H - s(118))
+        d.line([(0, y), (W, y)], fill=mix((40, 30, 24), (66, 48, 36), t) + (255,))
+    for k in range(8):
+        y = s(118) + (k / 8) ** 1.4 * (H - s(118))
+        d.line([(0, y), (W, y)], fill=(18, 12, 10, 255), width=2)
+    paint(img, lay, 0.5)
+    # The door on the left, evening light around its edges.
+    lay = new_layer()
+    d = ImageDraw.Draw(lay)
+    d.rectangle([0, s(26), s(20), s(120)], fill=(40, 30, 24, 255))
+    for k in range(4):
+        d.line([(s(k * 5), s(26)), (s(k * 5), s(120))], fill=(20, 14, 12, 255), width=2)
+    d.rectangle([s(20), s(24), s(23), s(120)], fill=(30, 22, 18, 255))  # the jamb
+    d.line([(s(20), s(27)), (s(20), s(119))], fill=(255, 196, 130, 255), width=round(s(0.6)))  # light through the crack
+    paint(img, lay, 0.5)
+    # The window, small and deep in the logs, the evening sky orange in it.
+    lay = new_layer()
+    d = ImageDraw.Draw(lay)
+    d.rectangle([s(41), s(29), s(63), s(47)], fill=(26, 18, 14, 255))
+    for y in range(s(31), s(45)):
+        t = (y - s(31)) / s(14)
+        d.line([(s(43), y), (s(61), y)], fill=mix((255, 186, 120), (240, 120, 80), t) + (255,))
+    d.line([(s(52), s(31)), (s(52), s(45))], fill=(40, 26, 20, 255), width=round(s(0.8)))
+    d.line([(s(43), s(38)), (s(61), s(38))], fill=(40, 26, 20, 255), width=round(s(0.8)))
+    paint(img, lay, 0.4)
+    # The smoke vent high in the wall, its board half slid across.
+    lay = new_layer()
+    d = ImageDraw.Draw(lay)
+    d.rectangle([s(138), s(10), s(152), s(22)], fill=(6, 4, 4, 255))
+    d.rectangle([s(138), s(10), s(146), s(22)], fill=(48, 36, 28, 255))
+    d.line([(s(138), s(9)), (s(153), s(9))], fill=(70, 52, 40, 255), width=round(s(0.8)))
+    paint(img, lay, 0.4)
+    # The old beam above the benches, with Grandfather's marks cut into it.
+    lay = new_layer()
+    d = Canvas(lay)
+    for py in range(s(10)):
+        t = py / s(10)
+        d.line([(s(150), s(20) + py), (W, s(20) + py)], fill=tuple(clamp(c * log_shade(t, 0.2)) for c in (86, 62, 46)) + (255,))
+    x = 160
+    while x < 314:  # runes: short straight cuts, lighter where the knife bit
+        k = rng.randint(0, 3)
+        top, bot = s(22.2), s(28)
+        cut = (176, 140, 100, 255)
+        d.line([(s(x), top), (s(x), bot)], fill=cut, width=round(s(0.45)))
+        if k == 0:
+            d.line([(s(x), top), (s(x + 2.4), top + s(2.2))], fill=cut, width=round(s(0.4)))
+        elif k == 1:
+            d.line([(s(x), top + s(1.5)), (s(x + 2.2), top - s(0.2))], fill=cut, width=round(s(0.4)))
+            d.line([(s(x), top + s(3.5)), (s(x + 2.2), top + s(1.8))], fill=cut, width=round(s(0.4)))
+        elif k == 2:
+            d.line([(s(x - 1.6), top + s(1)), (s(x + 1.6), bot - s(1))], fill=cut, width=round(s(0.4)))
+        x += rng.uniform(4.5, 7.5)
+    paint(img, d, 0.4)
+    # The ladle hanging on its peg.
+    lay = new_layer()
+    d = ImageDraw.Draw(lay)
+    d.line([(s(157), s(58)), (s(157), s(77))], fill=(120, 88, 58, 255), width=round(s(1.3)))
+    d.ellipse([s(152), s(75), s(162), s(84)], fill=(104, 74, 50, 255))
+    d.ellipse([s(153.5), s(76), s(160.5), s(80)], fill=(40, 28, 20, 255))
+    d.ellipse([s(155.5), s(56), s(158.5), s(59)], fill=(30, 22, 18, 255))  # the peg
+    paint(img, lay, 0.5)
+    # The benches: a low step and the high bench, pale wood gone brown with heat and soot.
+    lay = new_layer()
+    d = Canvas(lay)
+    d.rectangle([s(172), s(100), W, s(120)], fill=(4, 3, 3, 255))  # the dark under the benches
+    for x0, y0, y1, face in ((212, 68, 74, 96), (170, 94, 100, None)):
+        for k in range(4):  # the top: boards running along, gaps between
+            ya = s(y0) + k * s((y1 - y0) / 4)
+            for px in range(s(x0), W, 4):
+                f = (px - s(x0)) / (W - s(x0))
+                col = mix((196, 146, 96), (92, 66, 46), f ** 0.7)
+                d.line([(px, ya), (px + 4, ya)], fill=col + (255,), width=round(s((y1 - y0) / 4)) - 1)
+            d.line([(s(x0), ya), (W, ya)], fill=(36, 24, 18, 255), width=1)
+        d.line([(s(x0), s(y0)), (W, s(y0))], fill=(232, 186, 130, 255), width=2)  # the front edge, catching the fire
+        if face:
+            for px in range(s(x0), W, s(6)):  # the high bench's face: upright boards
+                f = (px - s(x0)) / (W - s(x0))
+                d.rectangle([px, s(y1), px + s(6) - 2, s(face)], fill=mix((96, 68, 46), (40, 28, 20), f ** 0.6) + (255,))
+    for x in (174, 214, 262, 310):  # posts holding them up
+        d.rectangle([s(x), s(100), s(x + 3), s(120)], fill=(54, 38, 28, 255))
+    for _ in range(160):  # wear and sweat stains on the boards
+        x, y = rng.uniform(s(172), W), rng.choice((rng.uniform(s(70), s(74)), rng.uniform(s(96), s(100))))
+        dab(d, x, y, rng.uniform(4, 14), 1.2, (110, 76, 50, 90), 0, 6)
+    paint(img, d, 0.5)
+    # The kiuas, and the fire in its mouth.
+    lay = new_layer()
+    d = ImageDraw.Draw(lay)
+    d.rectangle([s(70), s(100), s(130), s(120)], fill=(38, 32, 30, 255))  # its fieldstone base
+    paint(img, lay, 0.5)
+    stone_heap(img, rng, 100, 112, 38, 50, fire=(100, 112))
+    fire_mouth(img, rng, 89, 104, 111, 119)
+    # Light: the fire's glow over floor, stones and benches; the window's beam through the
+    # smoke; haze under the roof; deep shadow everywhere else.
+    light = new_layer()
+    shade(light, rng, [(-10, -10), (330, -10), (330, 154), (-10, 154)], 70, 0, color=(8, 4, 10), softness=1)
+    shade(light, rng, [(250, -10), (330, -10), (330, 154), (280, 154)], 120, 0, color=(4, 2, 6), softness=20)
+    pool(light, 100, 128, 64, 16, 170, (255, 130, 50))  # firelight on the floor
+    pool(light, 100, 100, 30, 18, 60, (255, 110, 40))  # ...and the lowest stones
+    pool(light, 100, 74, 90, 46, 45, (255, 120, 60))  # ...and the walls around it
+    pool(light, 196, 98, 44, 10, 60, (255, 130, 60))  # ...and the step
+    shaft = Image.new("L", (W, H), 0)
+    ImageDraw.Draw(shaft).polygon([(s(44), s(32)), (s(60), s(32)), (s(150), s(144)), (s(118), s(144))], fill=46)
+    beam = Image.new("RGBA", (W, H), (255, 196, 140, 255))
+    beam.putalpha(shaft.filter(ImageFilter.GaussianBlur(s(4))))
+    light.alpha_composite(beam)
+    mist(light, rng, 16, 26, 70, 0, 320, (120, 110, 120))  # smoke under the roof
+    img.alpha_composite(light)
+    save(finish(img, rng, 0.03, (255, 150, 90)), "rooms/sauna.png")
+
+
+def shore():
+    """The lake shore at sundown: the sun gone behind the far hills, the water holding the
+    afterglow, an old jetty running out from the reeds, a boat pulled up on the sand."""
+    rng = random.Random(23)
+    img = Image.new("RGBA", (W, H))
+    sky(img, rng, top=(54, 58, 116), haze=(255, 158, 112), horizon=0.5, clouds=4, cloud_bottom=0.4)
+    open_sky = img.copy()
+    lake_top = s(72)
+    hills(img, rng, lake_top + s(2), s(14), (70, 50, 90), 0.1)
+    treeline(img, rng, lake_top + s(3), s(9), (40, 30, 52), 1.0, 30, x0=0, x1=W)
+    gradient(img, [(0.0, (214, 130, 112)), (0.12, (240, 150, 110)), (0.35, (220, 126, 108)), (0.65, (150, 96, 120)),
+                   (1.0, (70, 52, 84))],
+             lake_top + s(2), s(120))
+    lay = new_layer()
+    d = Canvas(lay)
+    for _ in range(500):  # ripples: darker troughs, lit crests
+        x, y = rng.uniform(0, W), rng.uniform(lake_top + s(4), s(118))
+        f = (y - lake_top) / s(46)
+        dab(d, x, y, rng.uniform(s(2), s(9)) * (0.4 + f), rng.uniform(0.6, 1.3) * (0.5 + f),
+            ((60, 40, 70, 90) if rng.random() < 0.6 else (255, 200, 150, 110)), 0, 6)
+    paint(img, d, 0.6)
+    glitter(img, rng, s(236), lake_top + s(4), s(116), s(12), count=180)
+    mist(img, rng, 78, 5, 80, 0, 320, (250, 170, 150))
+    # The sand and grass of the shore.
+    lay = new_layer()
+    d = ImageDraw.Draw(lay)
+    pts_ = [(0, H)] + [(x, s(114) + math.sin(x * 0.006) * s(2) + rng.uniform(-2, 2)) for x in range(0, W + 16, 16)] + [(W, H)]
+    d.polygon(pts_, fill=(150, 110, 80, 255))
+    for _ in range(2600):
+        x, y = rng.uniform(0, W), rng.uniform(s(114), H)
+        col = rng.choice([(170, 128, 90), (120, 90, 66), (96, 100, 56), (140, 120, 66)])
+        dab(d, x, y, rng.uniform(2, 7), rng.uniform(1, 2.5), vary(col, rng, 10), 0, 6)
+    for _ in range(900):
+        x, y = rng.uniform(0, W), rng.uniform(s(118), H)
+        d.line([(x, y), (x + rng.uniform(-3, 3), y - rng.uniform(4, 14))], fill=vary((88, 96, 52), rng, 12), width=2)
+    paint(img, lay, 0.5)
+    # The jetty: grey boards on posts, running from the shore out over the water.
+    lay = new_layer()
+    d = Canvas(lay)
+    near_l, near_r, near_y = s(40), s(100), s(132)
+    far_l, far_r, far_y = s(126), s(146), s(98)
+    for k in range(6):  # posts
+        f = k / 5
+        x = near_l + (far_l - near_l) * f
+        y = near_y + (far_y - near_y) * f
+        d.rectangle([x - s(1.2) * (1 - f * 0.5), y, x + s(1.2) * (1 - f * 0.5), y + s(10) * (1 - f * 0.6)], fill=(46, 36, 34, 255))
+        x2 = near_r + (far_r - near_r) * f
+        d.rectangle([x2 - s(1.2) * (1 - f * 0.5), y, x2 + s(1.2) * (1 - f * 0.5), y + s(10) * (1 - f * 0.6)], fill=(36, 28, 28, 255))
+    d.polygon([(near_l, near_y), (near_r, near_y), (far_r, far_y), (far_l, far_y)], fill=(150, 128, 112, 255))
+    for k in range(34):  # boards across it
+        f = (k / 34) ** 0.9
+        y = near_y + (far_y - near_y) * f
+        xl = near_l + (far_l - near_l) * f
+        xr = near_r + (far_r - near_r) * f
+        d.line([(xl, y), (xr, y)], fill=(82, 66, 58, 255), width=max(1, round(3 * (1 - f))))
+    d.line([(near_r, near_y), (far_r, far_y)], fill=(255, 190, 140, 255), width=3)  # its sunward edge
+    d.soft("polygon", [(near_l, near_y), (near_r, near_y), (near_r + s(4), near_y + s(10)), (near_l + s(4), near_y + s(10))],
+           fill=(20, 14, 18, 120))
+    paint(img, d, 0.5)
+    # Reeds along the water's edge.
+    lay = new_layer()
+    d = ImageDraw.Draw(lay)
+    for cx, n in ((s(14), 90), (s(160), 50), (s(300), 70)):
+        for _ in range(n):
+            x = cx + rng.gauss(0, s(9))
+            h = rng.uniform(s(6), s(20))
+            y = s(118) + rng.uniform(-s(2), s(4))
+            col = rng.choice([(110, 100, 56), (150, 128, 70), (70, 66, 40)])
+            d.line([(x, y), (x + rng.uniform(-s(2), s(2)), y - h)], fill=col + (255,), width=2)
+            if rng.random() < 0.15:  # a bulrush head
+                d.ellipse([x - 2, y - h - s(1), x + 2, y - h + s(2)], fill=(70, 40, 26, 255))
+    paint(img, lay, 0.4)
+    # The rowboat pulled up and turned over on the sand.
+    lay = new_layer()
+    d = Canvas(lay)
+    hull = curve((s(232), s(122)), (s(262), s(100)), (s(294), s(118)), 20) + [(s(290), s(124)), (s(236), s(126))]
+    d.polygon(hull, fill=(72, 54, 46, 255))
+    for k in range(5):
+        y0 = s(122) - k * s(3.4)
+        d.line(curve((s(234) + k * s(3), y0), (s(262), y0 - s(14) + k * s(2.4)), (s(292) - k * s(2.6), y0 - s(3)), 14),
+               fill=(110, 84, 66, 255), width=2)
+    d.line(curve((s(232), s(122)), (s(262), s(100)), (s(294), s(118)), 20), fill=(255, 180, 130, 255), width=3)
+    d.soft("ellipse", [s(228), s(122), s(300), s(130)], fill=(20, 14, 18, 130))
+    paint(img, d, 0.5)
+    for x0, y0, x1, y1 in ((s(8), s(124), s(30), s(134)), (s(196), s(126), s(214), s(134)), (s(150), s(134), s(176), s(144))):
+        rock(img, rng, x0, y0, x1, y1, 0.4)
+    # A birch leaning over the water on the left, and a dark spruce framing the right.
+    leafy_tree(img, rng, s(28), s(120), s(118), s(48), white_trunk=True, shadowed=0.3)
+    spruce(img, rng, s(318), s(150), s(170), s(52), 1.2, 0.6, 0.5, shadowed=0.7)
+    canopy(img, rng, -6, -6, 56, 18, 0.8)
+    light = new_layer()
+    shade(light, rng, [(-10, -10), (330, -10), (330, 154), (-10, 154)], 70, 0, color=DUSK_SHADE, softness=1)
+    pool(light, 236, 90, 70, 20, 90, (255, 170, 110))  # the afterglow on the water
+    shade(light, rng, [(0, 128), (320, 126), (320, 144), (0, 144)], 150, 20, color=DUSK_SHADE)
+    light.alpha_composite(sunlight((s(236), s(70)), [(170, 6, 50), (178, 4, 60), (186, 5, 50), (194, 3, 40)], s(90), 130,
+                                   (255, 170, 110)))
+    save_room(img, rng, "rooms/shore.png", sky_mask(open_sky, img), 0.1, light=light)
+    evening("rooms/shore.png", "rooms/shore.png", sun=(300, 80))
+    sunset_sky_layer("rooms/shore_sky.png", 104, horizon=0.5, clouds=8, sun_x=0.74)
+
+
+def evening_rooms():
+    evening("rooms/village.png", "rooms/village_evening.png", window=(196, 66, 210, 77))
+    evening("rooms/path.png", "rooms/path_evening.png")
+    evening("rooms/grove.png", "rooms/grove_evening.png")
+    sunset_sky_layer("rooms/village_evening_sky.png", 105, horizon=0.6, sun_x=0.1)
+    sunset_sky_layer("rooms/path_evening_sky.png", 106, horizon=0.66, clouds=11, sun_x=0.1)
+    sunset_sky_layer("rooms/grove_evening_sky.png", 107, horizon=0.66, clouds=5, sun_x=0.1)
+
+
+# ---- objects and items
+
+WOOD = ((70, 48, 32), (132, 96, 62), (196, 156, 108))
+ASH = ((74, 70, 66), (128, 124, 118), (190, 186, 178))
+WATER = ((40, 60, 80), (90, 120, 140), (200, 220, 226))
+SILVER = ((84, 86, 96), (168, 170, 178), (246, 246, 250))
+BIRCH_LEAF = ((50, 72, 30), (96, 128, 46), (170, 190, 90))
+
+
+def bucket(w, h, full="ash"):
+    """A wooden sauna bucket: staves bound with birch-root hoops, and a little handle;
+    full of grey ash, or of clear lake water."""
+    img, d = sprite(w, h)
+    rng = random.Random(53)
+    top, base = h * 0.3, h * 0.94
+    tone(img, [(w * 0.14, top), (w * 0.86, top), (w * 0.8, base), (w * 0.2, base)], WOOD, "cylinder")
+    for k in range(1, 7):  # the staves
+        x = w * (0.14 + 0.72 * k / 7)
+        stroke(d, [(x, top + h * 0.02), (x - (x - w / 2) * 0.08, base - h * 0.02)], WOOD[0], 0.05 * w, 140)
+    for y in (top + (base - top) * 0.25, top + (base - top) * 0.78):  # hoops
+        stroke(d, [(w * 0.15, y), (w * 0.85, y)], (60, 44, 30), 0.07 * w, 230)
+        stroke(d, [(w * 0.15, y - 0.03 * h), (w * 0.6, y - 0.03 * h)], WOOD[2], 0.02 * w, 160)
+    inside = oval(w / 2, top, w * 0.36, h * 0.07)
+    if full == "ash":
+        tone(img, inside, ASH, "sphere", light=0.05)
+        for _ in range(12):
+            touch(d, w / 2 + rng.uniform(-w * 0.25, w * 0.25), top + rng.uniform(-h * 0.03, h * 0.03), 0.04 * w, 0.02 * h,
+                  ASH[0], 150)
+    else:
+        tone(img, inside, WATER, "flat", light=0.1)
+        touch(d, w * 0.42, top - h * 0.01, w * 0.14, h * 0.015, (240, 244, 246), 220)
+    stroke(d, curve((w * 0.16, top), (w * 0.5, top - h * 0.32), (w * 0.84, top), 10), WOOD[1], 0.05 * w, 255)  # handle
+    return img
+
+
+def feather(w, h):
+    """A magpie's tail feather: long and black, flashing green and blue where it turns."""
+    img, d = sprite(w, h)
+    shaft = [(w * 0.06, h * 0.8), (w * 0.94, h * 0.2)]
+    vane = curve((w * 0.06, h * 0.82), (w * 0.5, h * 0.95), (w * 0.95, h * 0.2), 12) + curve(
+        (w * 0.95, h * 0.2), (w * 0.5, h * 0.1), (w * 0.08, h * 0.7), 12)
+    tone(img, vane, PLUMAGE, "flat", light=0.05)
+    stroke(d, curve((w * 0.3, h * 0.66), (w * 0.6, h * 0.58), (w * 0.88, h * 0.24), 10), (40, 120, 110), 0.06 * h + 0.08, 200)
+    stroke(d, curve((w * 0.36, h * 0.76), (w * 0.64, h * 0.66), (w * 0.9, h * 0.3), 10), (60, 70, 160), 0.05 * h + 0.06, 170)
+    stroke(d, shaft, (200, 196, 190), 0.03 * h + 0.06, 230)
+    return img
+
+
+def coin(w, h):
+    """An old silver coin, worn smooth, a crown just visible on it, catching the sunset."""
+    img, d = sprite(w, h)
+    cx, cy, r = w / 2, h / 2, min(w, h) * 0.42
+    tone(img, oval(cx, cy, r, r * 0.92), SILVER, "sphere")
+    rim = oval(cx, cy, r * 0.82, r * 0.76, 24)
+    stroke(d, rim + rim[:1], SILVER[0], r * 0.08, 160)
+    for k in range(8):  # a worn rosette
+        a = k * math.pi / 4
+        touch(d, cx + math.cos(a) * r * 0.36, cy + math.sin(a) * r * 0.34, r * 0.09, r * 0.09, SILVER[0], 190)
+    touch(d, cx, cy, r * 0.12, r * 0.12, SILVER[0], 200)
+    touch(d, cx - r * 0.38, cy - r * 0.42, r * 0.2, r * 0.1, (255, 230, 200), 255, -0.6)
+    return img
+
+
+def twigs(w, h, bound=False):
+    """Leafy birch twigs: loose, or bound into a vihta with a twist of yarn, the leaves
+    fanning out from the handle."""
+    img, d = sprite(w, h)
+    rng = random.Random(51 if bound else 52)
+    grip = (w * 0.22, h * 0.82)
+    for k in range(9):
+        a = -0.95 + k * 0.11 + rng.uniform(-0.05, 0.05)
+        ln = rng.uniform(0.65, 0.85) * w
+        end = (grip[0] + math.cos(a) * ln, grip[1] + math.sin(a) * ln)
+        start = grip if bound else (grip[0] + rng.uniform(-w * 0.08, w * 0.08), grip[1] + rng.uniform(-h * 0.05, h * 0.05))
+        stroke(d, [start, end], (86, 60, 44), 0.025 * w + 0.05, 255)
+        for f in (0.45, 0.6, 0.72, 0.84, 0.95):
+            lx = start[0] + (end[0] - start[0]) * f + rng.uniform(-w * 0.04, w * 0.04)
+            ly = start[1] + (end[1] - start[1]) * f + rng.uniform(-h * 0.04, h * 0.04)
+            col = BIRCH_LEAF[rng.randint(0, 2)]
+            touch(d, lx, ly, w * 0.06, w * 0.035, col, 255, a + rng.uniform(-0.8, 0.8))
+    if bound:
+        stroke(d, [(grip[0] - w * 0.12, grip[1] + h * 0.1), (grip[0] + w * 0.04, grip[1] - h * 0.04)], (86, 60, 44), 0.09 * w, 255)
+        for k in range(3):
+            y = grip[1] + h * 0.02 - k * h * 0.035
+            stroke(d, [(grip[0] - w * 0.08 + k * w * 0.02, y + h * 0.04), (grip[0] + w * 0.02 + k * w * 0.02, y - h * 0.02)],
+                   LINEN[1], 0.035 * w, 255)
+    return img
+
+
+def sauna_objects():
+    eyes()
+    painted_figure(lambda: bucket(16, 16), "objects/bucket.png", 61, brushes=SMALL_BRUSHES)
+    painted_figure(lambda: bucket(16, 16), "items/bucket.png", 62, brushes=SMALL_BRUSHES)
+    painted_figure(lambda: bucket(16, 16, "water"), "items/water.png", 63, brushes=SMALL_BRUSHES)
+    painted_figure(lambda: feather(8, 4), "objects/feather.png", 64, brushes=SMALL_BRUSHES)
+    painted_figure(lambda: feather(16, 16), "items/feather.png", 65, brushes=SMALL_BRUSHES)
+    painted_figure(lambda: coin(6, 6), "objects/coin.png", 66, brushes=SMALL_BRUSHES)
+    painted_figure(lambda: coin(16, 16), "items/coin.png", 67, brushes=SMALL_BRUSHES)
+    painted_figure(lambda: twigs(16, 16), "items/twigs.png", 68, brushes=SMALL_BRUSHES)
+    painted_figure(lambda: twigs(16, 16, bound=True), "items/vihta.png", 69, brushes=SMALL_BRUSHES)
+
+
+def titles():
+    title_logo()
+    title_logo("THE SAUNA SPIRIT", "intro/title_sauna.png")
+    title_logo(None, "intro/logo.png")
+
+
+def sauna_tale():
+    intro_dusk()
+    window_glow()
+    titles()
+    cards()
+    sauna_interior()
+    shore()
+    evening_rooms()
+    sauna_objects()
+
+
+
+def first_tale():
     village()
     path()
     grove()
@@ -1884,4 +2728,13 @@ if __name__ == "__main__":
     intro_night()
     ember_glow()
     title_logo()
+
+
+if __name__ == "__main__":
+    # Paint everything, or only some parts: `make_art.py sauna_interior shore`. The second
+    # tale's evening rooms and menu cards are made from the first tale's art.
+    import sys
+
+    for name in sys.argv[1:] or ["first_tale", "sauna_tale"]:
+        globals()[name]()
     print("art written to", ASSETS)

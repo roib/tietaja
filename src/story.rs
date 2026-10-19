@@ -217,6 +217,10 @@ impl Verb {
 
 #[derive(Debug)]
 pub struct Story {
+    /// The tale's name, shown on the menu.
+    pub title: Option<String>,
+    /// Shown once the tale is won.
+    pub ending: Option<String>,
     /// The character the player controls; their lines appear above the player.
     pub player: String,
     pub start: (String, f32),
@@ -248,6 +252,8 @@ impl Story {
 
     pub fn parse(src: &str) -> Result<Story, String> {
         let mut story = Story {
+            title: None,
+            ending: None,
             player: "Player".to_string(),
             start: (String::new(), 0.0),
             intro: None,
@@ -283,6 +289,8 @@ impl Story {
                         story.start = (room.to_string(), parse_num(x).map_err(|e| err(&e))?);
                     }
                     "intro:" => story.intro = Some(rest.to_string()),
+                    "title:" => story.title = Some(rest.to_string()),
+                    "ending:" => story.ending = Some(rest.to_string()),
                     "player:" => story.player = rest.to_string(),
                     "ending_music:" => story.ending_music = Some(rest.to_string()),
                     "character" => {
@@ -674,6 +682,9 @@ mod tests {
     use super::*;
 
     const STORY: &str = include_str!("../assets/story.txt");
+    const SAUNA: &str = include_str!("../assets/sauna.txt");
+    /// Every tale, for the checks that apply to them all.
+    const STORIES: [(&str, &str); 2] = [("story.txt", STORY), ("sauna.txt", SAUNA)];
 
     fn new_game(story: &Story) -> GameState {
         GameState { room: story.start.0.clone(), ..Default::default() }
@@ -712,8 +723,22 @@ mod tests {
     }
 
     #[test]
+    fn every_story_parses_with_a_title_and_ending() {
+        for (file, src) in STORIES {
+            let story = Story::parse(src).unwrap_or_else(|e| panic!("{file}: {e}"));
+            assert!(story.title.is_some() && story.ending.is_some(), "{file} needs a title and an ending");
+        }
+    }
+
+    #[test]
     fn every_asset_the_story_uses_exists() {
-        let story = Story::parse(STORY).unwrap();
+        for (file, src) in STORIES {
+            let story = Story::parse(src).unwrap();
+            assets_exist(file, &story);
+        }
+    }
+
+    fn assets_exist(file: &str, story: &Story) {
         let mut paths: Vec<String> = Vec::new();
         for room in &story.rooms {
             paths.push(room.background.clone());
@@ -728,7 +753,7 @@ mod tests {
         }
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets");
         let missing: Vec<_> = paths.iter().filter(|p| !root.join(p).exists()).collect();
-        assert!(missing.is_empty(), "missing assets: {missing:?}");
+        assert!(missing.is_empty(), "{file}: missing assets: {missing:?}");
     }
 
     /// The game stretches each image to its room or hotspot size, so painted art must be
@@ -742,10 +767,10 @@ mod tests {
             let be = |i: usize| u32::from_be_bytes(bytes[i..i + 4].try_into().unwrap());
             (be(16), be(20))
         }
-        let story = Story::parse(STORY).unwrap();
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets");
         let mut wrong = Vec::new();
-        for room in &story.rooms {
+        let stories: Vec<Story> = STORIES.iter().map(|(_, src)| Story::parse(src).unwrap()).collect();
+        for room in stories.iter().flat_map(|story| &story.rooms) {
             let expected = ((ROOM_WIDTH * ART_SCALE) as u32, (ROOM_HEIGHT * ART_SCALE) as u32);
             let actual = png_size(&root.join(&room.background));
             if actual != expected {
@@ -884,5 +909,68 @@ mod tests {
         assert!(said.iter().any(|l| l.contains("tietäjä yet")));
         assert!(s.won);
         assert!(s.inventory.is_empty());
+    }
+
+    #[test]
+    fn sauna_walkthrough_wins_the_game() {
+        let story = Story::parse(SAUNA).unwrap();
+        let mut s = new_game(&story);
+        let intro = story.intro.clone().unwrap();
+        play(&story, &mut s, &intro, &[]);
+
+        // The steam bites; Kyllikki explains what the keeper wants.
+        interact(&story, &mut s, Verb::Use, None, "kiuas");
+        assert!(s.flags.contains("felt_bite"));
+        play(&story, &mut s, "talk_kyllikki", &["The steam in there bites", "Goodbye"]);
+        assert!(s.flags.contains("knows_amends"));
+
+        // Who offended it: the feather, the magpie, and Kyllikki's confession.
+        interact(&story, &mut s, Verb::Take, None, "feather");
+        interact(&story, &mut s, Verb::Use, Some("feather"), "kyllikki");
+        assert!(!s.flags.contains("knows_culprit"), "not before hearing the magpie");
+        interact(&story, &mut s, Verb::Talk, None, "magpie");
+        interact(&story, &mut s, Verb::Use, Some("feather"), "kyllikki");
+        assert!(s.flags.contains("knows_culprit"));
+        play(&story, &mut s, "talk_kyllikki", &["Will you apologise", "Goodbye"]);
+        assert!(!s.flags.contains("kyllikki_in_sauna"), "not until the sauna is ready");
+
+        // Clean water.
+        interact(&story, &mut s, Verb::Take, None, "bucket");
+        interact(&story, &mut s, Verb::Use, Some("bucket"), "lake");
+        assert!(s.inventory.contains(&"water".to_string()));
+
+        // A vihta: silver for the grove, twigs from the birch, bound by Kyllikki.
+        interact(&story, &mut s, Verb::Take, None, "birch");
+        assert!(!s.inventory.contains(&"twigs".to_string()), "the grove gives nothing for free");
+        interact(&story, &mut s, Verb::Take, None, "coin");
+        interact(&story, &mut s, Verb::Use, Some("coin"), "stone");
+        interact(&story, &mut s, Verb::Take, None, "birch");
+        interact(&story, &mut s, Verb::Use, Some("twigs"), "kyllikki");
+        assert!(s.inventory.contains(&"vihta".to_string()));
+
+        // Grandfather's words, once the smoke clears.
+        interact(&story, &mut s, Verb::Look, None, "beam");
+        assert!(!s.flags.contains("knows_loyly"));
+        interact(&story, &mut s, Verb::Use, None, "vent");
+        interact(&story, &mut s, Verb::Look, None, "beam");
+        assert!(s.flags.contains("knows_loyly"));
+
+        // The vihta can't be left, nor the water thrown, before the apology.
+        interact(&story, &mut s, Verb::Use, Some("vihta"), "benches");
+        assert!(!s.flags.contains("vihta_left"));
+        interact(&story, &mut s, Verb::Use, Some("water"), "kiuas");
+        assert!(!s.won);
+
+        // Kyllikki comes to the sauna, and has to say it properly.
+        play(&story, &mut s, "talk_kyllikki", &["The sauna's ready"]);
+        assert!(s.flags.contains("kyllikki_in_sauna"));
+        let said = play(&story, &mut s, "talk_kyllikki", &["Just say sorry", "Say it was the magpie", "Forgive my tongue"]);
+        assert!(said.iter().filter(|l| l.starts_with("Keeper: H")).count() == 2, "{said:?}");
+        assert!(s.flags.contains("apologized"));
+
+        interact(&story, &mut s, Verb::Use, Some("vihta"), "benches");
+        let said = interact(&story, &mut s, Verb::Use, Some("water"), "kiuas");
+        assert!(said.iter().any(|l| l.contains("Grandfather?")));
+        assert!(s.won);
     }
 }
