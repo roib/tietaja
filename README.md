@@ -1,8 +1,10 @@
-# Tietäjä: two Finnish folk tales
+# Tietäjä: three Finnish folk tales
 
-A small game made for experimenting with [Bevy](https://bevyengine.org) and [WebAssembly](https://webassembly.org): a point-and-click adventure in two tales. In *The Origin of Fire*, Vilja must sing a dead hearth back to life; in *The Sauna Spirit*, she must make peace with the offended keeper of the sauna. Both are set in Finnish folklore, and their painted rooms follow [Werner Holmberg](https://en.wikipedia.org/wiki/Werner_Holmberg)'s landscapes. It runs natively and in the browser, including on phones.
+A small game made for experimenting with [Bevy](https://bevyengine.org) and [WebAssembly](https://webassembly.org): a point-and-click adventure in three tales. In *The Origin of Fire*, Vilja must sing a dead hearth back to life; in *The Sauna Spirit*, she must make peace with the offended keeper of the sauna; in *The Fire Fox*, she must find the fox whose blazing tail lights the northern lights, before the polar night swallows Lapland. All are set in Finnish folklore, and their painted rooms follow [Werner Holmberg](https://en.wikipedia.org/wiki/Werner_Holmberg)'s landscapes. It runs natively and in the browser, including on phones.
 
 **Play it in your browser:** https://roib.github.io/tietaja/
+
+*The Sauna Spirit* opens on October 31, 2026 and *The Fire Fox* on November 6, 2026 (6 AM Pacific time); until then the menu shows them as coming soon.
 
 ## Controls
 
@@ -36,9 +38,10 @@ Every push to `main` builds the browser version and deploys it to GitHub Pages (
 
 ## Making the game
 
-- Each tale is one story file holding all its characters, items, rooms, hotspots and dialogue: `assets/story.txt` (the format is documented at its top) and `assets/sauna.txt`.
+- Each tale is one story file holding all its characters, items, rooms, hotspots and dialogue: `assets/story.txt` (the format is documented at its top), `assets/sauna.txt` and `assets/fox.txt`.
 - `src/`: the engine. `levels.rs` lists the tales and choreographs each one's opening, `menu.rs` is the screen where you choose a tale, `intro.rs` plays the openings, `story.rs` parses and runs a story, `main.rs` handles rooms, the player and the UI, and `scenery.rs` adds room effects and the crossfades between rooms.
-- `tools/make_art.py` paints the art (it needs Pillow). `tools/make_audio.py` synthesizes the music and the babble voices (it needs ffmpeg). Both can make just some parts, e.g. `tools/make_art.py sauna_tale`. You can replace any generated file with real art or audio.
+- `tools/make_art.py` paints the art (it needs Pillow), and `tools/make_audio.py` synthesizes the music and the babble voices (it needs ffmpeg). The Fire Fox's art and music come from `tools/make_fox_art.py` and `tools/make_fox_audio.py`, which the first two also run. All of them can make just some parts, e.g. `tools/make_art.py sauna_tale`. You can replace any generated file with real art or audio.
+- `web/` holds the favicon, app icons and web app manifest, which the browser build serves beside the page (`tools/make_art.py favicon` paints the icons).
 
 ## License
 
