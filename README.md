@@ -1,6 +1,6 @@
-# Tietäjä: the origin of fire
+# Tietäjä: two Finnish folk tales
 
-A demo game for experimenting with [Bevy](https://bevyengine.org) and [WebAssembly](https://webassembly.org): a small point-and-click adventure in two tales. In *The Origin of Fire*, Vilja must sing a dead hearth back to life; in *The Sauna Spirit*, she must make peace with the offended keeper of the sauna. Both are set in Finnish folklore, and their painted rooms follow [Werner Holmberg](https://en.wikipedia.org/wiki/Werner_Holmberg)'s landscapes. It runs natively and in the browser, including on phones.
+A small game made for experimenting with [Bevy](https://bevyengine.org) and [WebAssembly](https://webassembly.org): a point-and-click adventure in two tales. In *The Origin of Fire*, Vilja must sing a dead hearth back to life; in *The Sauna Spirit*, she must make peace with the offended keeper of the sauna. Both are set in Finnish folklore, and their painted rooms follow [Werner Holmberg](https://en.wikipedia.org/wiki/Werner_Holmberg)'s landscapes. It runs natively and in the browser, including on phones.
 
 **Play it in your browser:** https://roib.github.io/tietaja/
 
