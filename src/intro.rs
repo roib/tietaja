@@ -38,6 +38,7 @@ pub struct IntroDef {
     pub zoom: &'static [(f32, f32)],
     pub glows: &'static [Glow],
     pub wisps: &'static [Wisps],
+    pub runners: &'static [Runner],
     pub captions: &'static [(f32, f32, &'static str)],
     /// When the title lands.
     pub hit: f32,
@@ -73,6 +74,20 @@ pub enum Life {
     Dies(f32),
     /// Dark until this time, then opens like a pair of eyes, and blinks now and then.
     Opens(f32),
+}
+
+/// Something moving through the painting: an animated figure (the fox) following a path,
+/// leaning the way it goes, appearing at the path's first point and gone after its last.
+pub struct Runner {
+    /// Its frames, played in a loop.
+    pub frames: &'static [&'static str],
+    pub fps: f32,
+    /// Its width, as a fraction of the painting's width, and its height over its width.
+    pub width: f32,
+    pub aspect: f32,
+    /// Where it is over time: (seconds, x, y), as fractions of the painting, moving in a
+    /// straight line from one point to the next.
+    pub path: &'static [(f32, f32, f32)],
 }
 
 /// Smoke or steam rising from a point in the painting: puffs that drift up, swell and fade.
@@ -126,6 +141,12 @@ struct Painting;
 struct GlowLight(usize);
 
 #[derive(Component)]
+struct RunnerSprite {
+    runner: usize,
+    frames: Vec<Handle<Image>>,
+}
+
+#[derive(Component)]
 struct Puff {
     wisps: usize,
     /// Where in its life this puff is, as a fraction, at time zero.
@@ -159,7 +180,7 @@ impl Plugin for IntroPlugin {
     fn build(&self, app: &mut App) {
         app.init_state::<Screen>()
             .add_systems(OnEnter(Screen::Intro), spawn_intro)
-            .add_systems(Update, (advance, input, animate).chain().run_if(in_state(Screen::Intro)))
+            .add_systems(Update, (advance, input, animate, run).chain().run_if(in_state(Screen::Intro)))
             .add_systems(OnExit(Screen::Intro), despawn_intro);
     }
 }
@@ -195,6 +216,21 @@ fn spawn_intro(mut commands: Commands, assets: Res<AssetServer>, sound: Res<Soun
             },
             UiTransform::default(),
             GlowLight(i),
+            ChildOf(painting),
+        ));
+    }
+    for (i, runner) in def.runners.iter().enumerate() {
+        let frames: Vec<Handle<Image>> = runner.frames.iter().map(|path| assets.load(*path)).collect();
+        commands.spawn((
+            ImageNode { color: clear, ..ImageNode::new(frames[0].clone()) },
+            Node {
+                position_type: PositionType::Absolute,
+                width: percent(runner.width * 100.0),
+                height: percent(runner.width * runner.aspect / def.painting_aspect * 100.0),
+                ..default()
+            },
+            UiTransform::default(),
+            RunnerSprite { runner: i, frames },
             ChildOf(painting),
         ));
     }
@@ -378,6 +414,46 @@ fn pan_at(pan: &[(f32, f32)], t: f32) -> f32 {
     value
 }
 
+/// Where a runner is at time `t`, which way it's heading (radians, 0 = right, y down),
+/// and how visible it is (fading in at the start of its path and out at the end).
+fn runner_at(path: &[(f32, f32, f32)], t: f32) -> (Vec2, f32, f32) {
+    let (Some(&(t0, ..)), Some(&(t1, ..))) = (path.first(), path.last()) else {
+        return (Vec2::ZERO, 0.0, 0.0);
+    };
+    let alpha = smoothstep((t - t0) / 0.4).min(smoothstep((t1 - t) / 0.8));
+    let i = path.windows(2).position(|w| t < w[1].0).unwrap_or(path.len().saturating_sub(2));
+    let ((ta, xa, ya), (tb, xb, yb)) = (path[i], path[(i + 1).min(path.len() - 1)]);
+    let f = ((t - ta) / (tb - ta).max(0.001)).clamp(0.0, 1.0);
+    let heading = (yb - ya).atan2(xb - xa);
+    (Vec2::new(xa + (xb - xa) * f, ya + (yb - ya) * f), heading, alpha)
+}
+
+/// Move the runners along their paths, playing their frames.
+fn run(
+    intro: Res<Intro>,
+    levels: Res<Levels>,
+    mut runners: Query<(&RunnerSprite, &mut ImageNode, &mut Node, &mut UiTransform), (Without<GlowLight>, Without<Puff>)>,
+) {
+    let def = &levels.0[intro.level].intro;
+    let t = intro.time;
+    for (sprite, mut image, mut node, mut transform) in &mut runners {
+        let runner = &def.runners[sprite.runner];
+        let (pos, heading, alpha) = runner_at(runner.path, t);
+        let height = runner.width * runner.aspect / def.painting_aspect;
+        node.left = percent((pos.x - runner.width / 2.0) * 100.0);
+        node.top = percent((pos.y - height / 2.0) * 100.0);
+        image.color = Color::srgba(1.0, 1.0, 1.0, alpha);
+        let frame = (t * runner.fps) as usize % sprite.frames.len();
+        if image.image != sprite.frames[frame] {
+            image.image = sprite.frames[frame].clone();
+        }
+        // Lean into climbs and dives, but never tip over: the frames face right.
+        let lean = if heading.cos() >= 0.0 { heading } else { std::f32::consts::PI - heading };
+        transform.rotation = Rot2::radians(lean.clamp(-0.7, 0.7));
+        image.flip_x = heading.cos() < 0.0;
+    }
+}
+
 /// A glow's brightness and how open it is (its height, for eyes), at time `t`.
 fn glow_at(life: &Life, t: f32) -> (f32, f32) {
     let flicker = 0.78 + 0.12 * (t * 7.3).sin() + 0.1 * (t * 13.1 + 1.7).sin();
@@ -532,6 +608,19 @@ fn animate(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn runners_follow_their_paths_and_fade_at_the_ends() {
+        let path = [(1.0, 0.0, 0.5), (3.0, 1.0, 0.5), (5.0, 1.0, 0.0)];
+        let (pos, heading, alpha) = runner_at(&path, 2.0);
+        assert_eq!((pos, heading), (Vec2::new(0.5, 0.5), 0.0));
+        assert_eq!(alpha, 1.0);
+        let (pos, heading, _) = runner_at(&path, 4.0);
+        assert_eq!(pos, Vec2::new(1.0, 0.25));
+        assert!((heading + std::f32::consts::FRAC_PI_2).abs() < 1e-6, "heading up the painting");
+        assert_eq!(runner_at(&path, 0.5).2, 0.0, "not there yet");
+        assert_eq!(runner_at(&path, 5.5).2, 0.0, "gone");
+    }
 
     #[test]
     fn pan_eases_between_keyframes() {

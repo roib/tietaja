@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use bevy::prelude::*;
 
-use crate::intro::{Glow, IntroDef, Life, Wisps};
+use crate::intro::{Glow, IntroDef, Life, Runner, Wisps};
 use crate::story::Story;
 
 pub struct Level {
@@ -86,6 +86,7 @@ const FIRE_INTRO: IntroDef = IntroDef {
         life: Life::Dies(16.0),
     }],
     wisps: &[],
+    runners: &[],
     captions: &[
         (2.6, 8.4, "Häme, long ago, in the time of the old words…"),
         (9.2, 14.6, "Every hearth kept a fire that had never once gone out."),
@@ -135,6 +136,7 @@ const SAUNA_INTRO: IntroDef = IntroDef {
         lean: 0.06,
         color: [0.38, 0.28, 0.32, 0.9],
     }],
+    runners: &[],
     captions: &[
         (3.4, 8.6, "Every sauna has a keeper, living under the benches."),
         (9.4, 14.8, "In the sauna, you behave as you would in church."),
@@ -168,13 +170,6 @@ const FOX_INTRO: IntroDef = IntroDef {
             life: Life::Dies(17.0),
         },
         Glow {
-            image: "intro/fox_run.png",
-            center: Vec2::new(FOX_RUN.0 / FOX_PANORAMA.0, FOX_RUN.1 / FOX_PANORAMA.1),
-            width: 56.0 / FOX_PANORAMA.0,
-            aspect: 0.5,
-            life: Life::Dies(15.0),
-        },
-        Glow {
             image: "intro/spark.png",
             center: Vec2::new(FOX_SPARK.0 / FOX_PANORAMA.0, FOX_SPARK.1 / FOX_PANORAMA.1),
             width: 12.0 / FOX_PANORAMA.0,
@@ -192,6 +187,23 @@ const FOX_INTRO: IntroDef = IntroDef {
         lean: 0.02,
         color: [0.34, 0.38, 0.5, 0.85],
     }],
+    // The fox bounds along the ridge, then leaps up and runs off into the sky along its
+    // trail of sparks, gone as the lights die.
+    runners: &[Runner {
+        frames: &["intro/fox_run_0.png", "intro/fox_run_1.png", "intro/fox_run_2.png", "intro/fox_run_3.png"],
+        fps: 10.0,
+        width: 46.0 / FOX_PANORAMA.0,
+        aspect: 0.5,
+        path: &[
+            (0.6, 70.0 / FOX_PANORAMA.0, 116.0 / FOX_PANORAMA.1),
+            (2.6, 120.0 / FOX_PANORAMA.0, 106.0 / FOX_PANORAMA.1),
+            (4.4, 166.0 / FOX_PANORAMA.0, 100.0 / FOX_PANORAMA.1),
+            (6.0, 196.0 / FOX_PANORAMA.0, 70.0 / FOX_PANORAMA.1),
+            (8.0, 250.0 / FOX_PANORAMA.0, 44.0 / FOX_PANORAMA.1),
+            (11.0, 360.0 / FOX_PANORAMA.0, 30.0 / FOX_PANORAMA.1),
+            (15.0, 520.0 / FOX_PANORAMA.0, 28.0 / FOX_PANORAMA.1),
+        ],
+    }],
     captions: &[
         (3.4, 8.6, "In the north, in the long night, the sky was never dark."),
         (9.4, 14.8, "A fox ran across the fells, and its tail set the snow alight."),
@@ -207,10 +219,9 @@ const FOX_INTRO: IntroDef = IntroDef {
     flash: [0.78, 1.0, 0.88],
 };
 
-/// The intro panorama's size, and places in it, in room units, matching INTRO_SIZE,
-/// FOX_RUN and FOX_SPARK in tools/make_fox_art.py.
+/// The intro panorama's size, and the place in it where the fox's last spark glimmers, in
+/// room units, matching INTRO_SIZE and FOX_SPARK in tools/make_fox_art.py.
 const FOX_PANORAMA: (f32, f32) = (832.0, 180.0);
-const FOX_RUN: (f32, f32) = (172.0, 104.0);
 const FOX_SPARK: (f32, f32) = (586.0, 171.0);
 
 #[cfg(test)]

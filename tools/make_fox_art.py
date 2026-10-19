@@ -50,7 +50,6 @@ EMBER = (255, 170, 70)
 
 INTRO_SIZE = (832, 180)  # room units: the intro's panorama, 2.6 frames wide
 FOX_SPARK = (586, 171)  # where the fox's last spark glimmers in it; FOX_SPARK in src/levels.rs
-FOX_RUN = (172, 104)  # where the fox leaps along the ridge as the lights burn; FOX_RUN in src/levels.rs
 
 
 @contextmanager
@@ -1312,7 +1311,7 @@ def fox_standing():
     fur_edge(d, chest[2:5], ARCTIC, rng, 40, 1.3)  # the ruff
     fur_fill(d, rng, 16.6, 17.4, 3.6, 5.0, ARCTIC, 50, math.pi / 2)
     tone(img, [(15.0, 22.0), (17.4, 22.4), (17.2, 28.6), (15.2, 28.6)], ARCTIC, "flat", light=0.05)  # near foreleg
-    for x in (16.2, 34.2, 17.8, 33.6):  # big furry paws
+    for x in (17.2, 33.0, 15.6, 33.6):  # big furry paws, pointing forward (left) like the fox
         touch(d, x, 28.6, 1.4, 0.65, ARCTIC[2], 255)
     head = oval(12.6, 11.4, 4.7, 4.1)
     tone(img, head, ARCTIC, "sphere", light=0.08)
@@ -1352,6 +1351,55 @@ def fox_leaping():
         tone(img, ear, ARCTIC, "flat", light=-0.1)
     touch(d, 51.0, 11.8, 0.5, 0.4, (16, 14, 18))
     touch(d, 46.0, 10.2, 0.5, 0.4, (26, 22, 20))
+    return img
+
+
+GALLOP = [  # (foreleg angle, hind leg angle, body bob, arch): angles from straight down, + forward
+    (62, -62, 0.0, 0.0),  # stretched out, all four legs off the snow
+    (18, -18, 0.6, 0.4),  # legs swinging in under the body
+    (-32, 34, -0.4, 1.2),  # gathered, back arched, hind feet landing ahead of the fore
+    (38, -42, 0.3, 0.5),  # pushing off, reaching forward again
+]
+
+
+def fox_running(frame):
+    """The fox bounding along, facing right: `frame` of the four-frame gallop. In a 60x30
+    box; its brush streams out behind, and the fire on it is added after."""
+    tone, touch, oval = A.tone, A.touch, A.oval
+    img, d = A.sprite(60, 30)
+    rng = random.Random(614 + frame)
+    fore, hind, bob, arch = GALLOP[frame]
+
+    def leg(top, angle, length, light, bend):
+        a = math.radians(angle)
+        kx, ky = top[0] + math.sin(a) * length * 0.55, top[1] + math.cos(a) * length * 0.55
+        b = math.radians(angle + bend)
+        fx, fy = kx + math.sin(b) * length * 0.5, ky + math.cos(b) * length * 0.5
+        w = 2.0
+        tone(img, [(top[0] - w, top[1]), (top[0] + w, top[1]), (kx + w * 0.55, ky), (fx + 0.7, fy), (fx - 0.7, fy), (kx - w * 0.55, ky)], ARCTIC, "flat", light=light)
+        touch(d, fx + 0.6, fy, 1.3, 0.65, ARCTIC[2] if light > -0.2 else ARCTIC[1], 255)
+
+    y0 = 15.4 + bob
+    bushy_tail(img, d, rng, ((21, y0 - 2.4), (10, y0 - 10), (0.5, y0 - 7.6)), ((0.5, y0 - 7.6), (7, y0 + 3.6), (21, y0 + 2.6)), light=-0.04)
+    leg((22.4, y0 + 1.6), hind + 14, 9.6, -0.3, -40)  # far legs
+    leg((36.0, y0 + 1.6), fore + 14, 9.0, -0.3, 30)
+    body = oval(29, y0, 10.6, 4.6 + arch * 0.6)
+    tone(img, body, ARCTIC, "sphere")
+    fur_edge(d, body, ARCTIC, rng, 80, 0.9)
+    fur_fill(d, rng, 29, y0, 10.6, 4.6, ARCTIC, 120, 0.0)
+    tone(img, oval(22.6, y0 + 0.6 - arch * 0.4, 4.6, 4.4), ARCTIC, "sphere", light=0.02)  # haunch
+    fur_fill(d, rng, 22.6, y0 + 0.6, 4.4, 4.2, ARCTIC, 40, math.pi * 0.6)
+    leg((22.0, y0 + 2.6), hind, 9.6, -0.04, -40)  # near legs
+    leg((36.4, y0 + 2.2), fore, 9.0, 0.05, 30)
+    tone(img, [(35, y0 - 3.4), (40.6, y0 - 5.2), (42, y0 - 0.6), (38.4, y0 + 3.0), (34.6, y0 + 2.4)], ARCTIC, "flat", light=0.12)  # chest
+    head = oval(43.4, y0 - 4.6, 4.4, 3.8)
+    tone(img, head, ARCTIC, "sphere", light=0.08)
+    fur_fill(d, rng, 43.4, y0 - 4.6, 4.0, 3.4, ARCTIC, 30, 0.2)
+    tone(img, [(46, y0 - 5.4), (51, y0 - 4.0), (50.8, y0 - 3.1), (46, y0 - 2.0)], ARCTIC, "flat", light=0.15)
+    for ear in ([(40.6, y0 - 7.0), (41.0, y0 - 10.8), (43.4, y0 - 8.0)], [(43.8, y0 - 8.2), (45.6, y0 - 11.0), (46.4, y0 - 7.0)]):
+        tone(img, ear, ARCTIC, "flat", light=-0.1)
+    touch(d, 51.0, y0 - 3.6, 0.5, 0.4, (16, 14, 18))
+    touch(d, 46.0, y0 - 5.2, 0.5, 0.4, (26, 22, 20))
     return img
 
 
@@ -1452,14 +1500,19 @@ def fire_fox(pose, seed, detail=2, heat=1.0, sparks=120, body=True):
     `pose` is "stand" (facing left) or "leap" (facing right). 60x30 units at SCALE*detail."""
     with_body = body
     k = A.SCALE * detail
-    fox = paint_sprite(fox_standing if pose == "stand" else fox_leaping, 600 + seed % 7, detail)
+    draw = {"stand": fox_standing, "leap": fox_leaping}.get(pose) or (lambda: fox_running(pose[1]))
+    fox = paint_sprite(draw, 600 + seed % 7, detail)
     rng = random.Random(seed)
     if pose == "stand":  # along the top of the brush and round its tip
         spine = [(42, 12.0), (47, 7.6), (52, 4.8), (55.6, 3.6), (57, 3.0)]
         warm_at = (44 * k, 13 * k)
-    else:
+    elif pose == "leap":
         spine = [(17, 10.6), (11, 7.4), (6, 6.4), (2, 6.6), (0.5, 7.0)]
         warm_at = (14 * k, 12 * k)
+    else:  # running: along the top of the brush, which bobs with the gait
+        y0 = 15.4 + GALLOP[pose[1]][2]
+        spine = [(17, y0 - 4.8), (11, y0 - 8.0), (6, y0 - 9.0), (2, y0 - 8.6), (0.5, y0 - 8.0)]
+        warm_at = (14 * k, (y0 - 3) * k)
     glow, flames = tail_flames(fox.size, rng, [(x * k, y * k) for x, y in spine], k, heat, sparks=sparks)
     if not with_body:  # just the fire, to lay over a fox coloured some other way
         return as_glow(flames, 1.6)
@@ -1852,7 +1905,24 @@ def intro_fells():
         cv.flush()
         ice.putalpha(mask_of(lake_pts).filter(ImageFilter.GaussianBlur(3)))
         img.alpha_composite(ice)
-        tree_row(img, rng, horizon + s(3), 5, 11, 0.55, s(250), s(560), step=(3, 7))
+        # Forest along the feet of the fells, thicker in places, and frost haze in the valley.
+        for x0, x1, hmin, hmax, step in ((-4, 300, 4, 9, (3, 8)), (250, 560, 5, 11, (2.5, 6)), (560, 840, 5, 12, (2.5, 6))):
+            tree_row(img, rng, horizon + s(3), hmin, hmax, 0.55, s(x0), s(x1), step=step)
+        for x0, x1 in ((300, 470), (560, 720)):
+            tree_row(img, rng, horizon + s(9), 8, 16, 0.35, s(x0), s(x1), step=(3, 7))
+        A.mist(img, rng, 128, 14, 70, 240, 520, color=(90, 120, 170))
+        # A frozen stream winding down from the lake to the foreground.
+        stream = smooth([(s(420), s(146)), (s(440), s(156)), (s(410), s(166)), (s(440), s(176)), (s(470), s(184))], 120)
+        sl = A.new_layer()
+        sv = A.Canvas(sl)
+        for i, (x, y) in enumerate(stream):
+            t = i / len(stream)
+            w = s(2 + 7 * t)
+            A.dab(sv, x, y, w, w * 0.32, A.mix((50, 72, 112), (30, 42, 78), t) + (255,), 0, 10)
+            if i % 3 == 0:
+                A.dab(sv, x + rng.uniform(-w, w) * 0.5, y, w * 0.4, s(0.25), A.mix((120, 150, 190), SNOW_HI, rng.random() * 0.5) + (200,), 0, 6)
+        sv.flush()
+        img.alpha_composite(sl.filter(ImageFilter.GaussianBlur(0.8)))
         # The ridge the fox runs along: snow over rock, lit along its crest.
         ridge_pts = smooth([(s(40), s(150)), (s(110), s(112)), (s(160), s(106)), (s(210), s(108)), (s(250), s(116)), (s(330), s(150))], 80)
         mound = Image.new("RGBA", (W, H()))
@@ -1861,6 +1931,30 @@ def intro_fells():
         img.alpha_composite(mound)
         for x0, y0, x1, y1 in ((96, 112, 120, 126), (226, 110, 252, 124), (140, 108, 158, 118)):
             rough_rock(img, rng, x0, y0, x1, y1, 0.3)
+        # Groves of snowy spruces through the middle distance.
+        for cx, base, n, hmax in ((118, 124, 5, 22), (338, 136, 6, 26), (612, 140, 7, 30), (796, 146, 4, 34)):
+            for j in range(n):
+                h = s(rng.uniform(hmax * 0.5, hmax))
+                snowy_spruce(img, rng, s(cx + rng.uniform(-12, 12)), s(base + rng.uniform(-2, 2)), h, h * rng.uniform(0.3, 0.38), fade=0.25, depth=3)
+        # The foreground: drifts carved by the wind, boulders, dead grass poking through.
+        fg = A.new_layer()
+        fv = A.Canvas(fg)
+        for _ in range(500):
+            x, y = rng.uniform(0, W), rng.uniform(s(158), H())
+            L = s(rng.uniform(8, 30))
+            A.dab(fv, x, y, L, s(rng.uniform(0.3, 0.6)), SNOW_HI + (150,), rng.uniform(-0.05, 0.05), 6)
+            A.dab(fv, x + s(1), y + s(0.8), L * 0.9, s(rng.uniform(0.3, 0.5)), A.mix(SNOW_LO, SNOW_MID, 0.4) + (130,), rng.uniform(-0.05, 0.05), 6)
+        fv.flush()
+        img.alpha_composite(fg)
+        for x0, y0, x1, y1 in ((36, 160, 62, 178), (186, 166, 206, 180), (404, 168, 420, 180), (520, 166, 548, 182), (668, 174, 690, 184)):
+            rough_rock(img, rng, x0, y0, x1, y1, 0.3)
+        grass = A.new_layer()
+        gd = ImageDraw.Draw(grass)
+        for _ in range(160):
+            x, y = rng.uniform(0, W), rng.uniform(s(160), H())
+            for _ in range(rng.randint(2, 5)):
+                gd.line([(x, y), (x + rng.uniform(-s(1.5), s(1.5)), y - rng.uniform(s(2), s(6)))], fill=A.mix((70, 66, 70), (130, 122, 110), rng.random()) + (255,), width=2)
+        img.alpha_composite(grass)
         # The forest edge: snowy spruces, close and tall, sweeping past.
         for x, base, h in [(470, 150, 60), (490, 146, 44), (506, 152, 74), (530, 148, 52), (548, 154, 40)]:
             snowy_spruce(img, rng, s(x), s(base), s(h), s(h * 0.34), depth=4, shadowed=0.2)
@@ -1886,6 +1980,19 @@ def intro_fells():
         for layer in (stars.filter(ImageFilter.GaussianBlur(1.2)), stars):
             layer.putalpha(ImageChops.multiply(layer.getchannel("A"), open_sky))
             img.alpha_composite(layer)
+        # The moon, low over the camp: it stays when the lights go out.
+        moon = black()
+        mx, my, mr = s(690), s(36), s(9)
+        glow_pool(moon, mx, my, mr * 5, mr * 5, (90, 120, 180), 90, mr * 3)
+        disc = Image.new("RGBA", (W, H()))
+        dd = ImageDraw.Draw(disc)
+        dd.ellipse([mx - mr, my - mr, mx + mr, my + mr], fill=(236, 238, 226, 255))
+        for _ in range(9):  # its seas
+            ox, oy, r = rng.uniform(-0.6, 0.5) * mr, rng.uniform(-0.6, 0.5) * mr, rng.uniform(0.15, 0.35) * mr
+            dd.ellipse([mx + ox - r, my + oy - r, mx + ox + r, my + oy + r], fill=(196, 200, 196, 255))
+        moon.alpha_composite(disc.filter(ImageFilter.GaussianBlur(1.2)))
+        moon_mask = ImageChops.multiply(open_sky, Image.new("L", (W, H()), 255))
+        img = screen(img, Image.composite(moon, black(), moon_mask))
         light = black()
         kota_light(light, door, s(756), s(110))
         img = screen(img, light)
@@ -1901,7 +2008,8 @@ def intro_fells():
             curtains.append(([(x0 + s(dx), s(y)) for dx, y in ((20, 30), (90, 42), (160, 28), (220, 46))], s(rng.uniform(26, 40)), 160, -0.2))
         light = aurora_light(rng, size, curtains)
         trail = Image.new("RGBA", size)
-        line = smooth([(s(FOX_RUN[0] - 14), s(FOX_RUN[1] - 4)), (s(150), s(80)), (s(220), s(50)), (s(320), s(34)), (s(460), s(26)), (s(560), s(30))], 300)
+        # It follows the fox's path up from the ridge (`runners` in FOX_INTRO, src/levels.rs).
+        line = smooth([(s(166), s(100)), (s(196), s(70)), (s(250), s(44)), (s(360), s(30)), (s(520), s(28)), (s(580), s(32))], 300)
         td = ImageDraw.Draw(trail)
         for i, (p, q) in enumerate(zip(line, line[1:])):
             t = i / len(line)
@@ -1917,7 +2025,8 @@ def intro_fells():
         light.alpha_composite(trail)
         A.save(as_glow(light, 1.8), "intro/aurora.png")
 
-    A.save(fire_fox("leap", 543, detail=2, heat=1.2, sparks=80), "intro/fox_run.png")
+    for frame in range(4):  # the fox bounding along the ridge and up into the sky
+        A.save(fire_fox(("run", frame), 560 + frame, detail=2, heat=1.2, sparks=80), f"intro/fox_run_{frame}.png")
     # The fox's last spark, glimmering in the snow.
     size = 256
     img = Image.new("RGBA", (size, size))
