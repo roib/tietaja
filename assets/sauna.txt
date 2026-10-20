@@ -134,8 +134,10 @@ node default_use_item
 
 node check_gifts
   [gift_water gift_vihta gift_word] jump finale
-  [!gift_water] Vilja: Still to do: clean water for the stones, from the lake.
-  [!gift_vihta] Vilja: Still to do: a vihta of birch twigs, from the old birch in the grove.
+  [!gift_water !water] Vilja: Still to do: clean water for the stones, from the lake.
+  [water !gift_water] Vilja: Still to do: throw the lake water on the sauna stove.
+  [!gift_vihta !vihta] Vilja: Still to do: a vihta of birch twigs, from the old birch in the grove.
+  [vihta !gift_vihta] Vilja: Still to do: lay the vihta on the sauna benches.
   [!gift_word] Vilja: Still to do: a kind word for the keeper.
 
 node finale

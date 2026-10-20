@@ -85,8 +85,8 @@ room fell: Tunturi, the fell top
   effect aurora: -20 -6 360 74 | count 11 | if sky_lit
   effect glow: 224 90 52 30 | if fox_lit !run_1 !sky_lit
   effect spirit: 226 70 48 40 | count 30 | if fox_lit !run_1 !sky_lit
-  effect glow: 60 90 52 30 | if run_1 !sky_lit
-  effect spirit: 40 40 60 70 | count 40 | if run_1 !sky_lit
+  effect glow: 96 90 52 30 | if run_1 !sky_lit
+  effect spirit: 76 40 60 70 | count 40 | if run_1 !sky_lit
   effect twinkle: 170 100 22 22 | count 3 | if !took_fur
   effect twinkle: 278 92 44 30 | count 3 | if took_fur !fox_lit
   effect glow: 124 50 42 66 | if sky_lit
@@ -98,7 +98,7 @@ room fell: Tunturi, the fell top
   hotspot bear: Bear-shaped spruce | 214 40 50 72
   hotspot snare: Torn snare | 176 108 10 12 | sprite objects/snare.png | if !took_fur
   hotspot fox: Fire fox | 220 86 60 30 | sprite objects/firefox_{}.png | frames 4 8 | if fox_lit !run_1 !sky_lit | glows
-  hotspot fox: Fire fox | 62 86 60 30 | sprite objects/firefox_{}.png | frames 4 8 | if run_1 !sky_lit | glows
+  hotspot fox: Fire fox | 98 86 60 30 | sprite objects/firefox_{}.png | frames 4 8 | if run_1 !sky_lit | glows
   hotspot sky: The sky | 0 0 320 26
   exit den: Den in the rocks | 282 96 38 26 | to den 60
   exit forest: Back down to the forest | 0 60 12 84 | to forest 290

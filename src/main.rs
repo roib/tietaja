@@ -348,16 +348,21 @@ fn setup(mut commands: Commands, assets: Res<AssetServer>, levels: Res<Levels>) 
         )],
     ));
 
-    // Speech floats above whoever is talking.
+    // Speech floats above whoever is talking, on a soft dark backing that hugs the words,
+    // so a line stays readable over snow or sunset.
     commands.spawn((
-        Node { position_type: PositionType::Absolute, display: Display::None, ..default() },
+        Node { position_type: PositionType::Absolute, display: Display::None, justify_content: JustifyContent::Center, ..default() },
         SpeechBox,
         children![(
-            Text::default(),
-            TextFont { font_size: FontSize::Px(22.0), ..default() },
-            TextLayout::justify(Justify::Center),
-            TextShadow { offset: Vec2::splat(1.5), color: Color::srgba(0.05, 0.03, 0.02, 0.95) },
-            SpeechText,
+            Node { padding: UiRect::axes(px(10), px(5)), border_radius: BorderRadius::all(px(10)), ..default() },
+            BackgroundColor(Color::srgba(0.03, 0.02, 0.04, 0.55)),
+            children![(
+                Text::default(),
+                TextFont { font_size: FontSize::Px(22.0), ..default() },
+                TextLayout::justify(Justify::Center),
+                TextShadow { offset: Vec2::splat(1.5), color: Color::srgba(0.05, 0.03, 0.02, 0.95) },
+                SpeechText,
+            )],
         )],
     ));
 
