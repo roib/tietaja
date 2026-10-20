@@ -18,7 +18,8 @@
 #                                              snow (falling), aurora (curtains of light behind
 #                                              the room, in its sky), spirit (sparks of spirit-fire),
 #                                              streak (the fire fox racing across the sky, from the
-#                                              bottom left of the area, trailing sparks; count = sparks)
+#                                              bottom left of the area, trailing sparks; count = sparks),
+#                                              twinkle (golden stars over something worth finding)
 #     hotspot <id>: <Name> | x y w h [| sprite <image>] [| frames <count> <per second>] [| if <conditions>] [| glows]
 #                                              an animated sprite has {} in its path for the frame number;
 #                                              one that glows makes its own light (the room's doesn't tint it)

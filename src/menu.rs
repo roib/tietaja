@@ -6,10 +6,11 @@ use bevy::{
     input::{ButtonState, keyboard::KeyboardInput},
     picking::hover::Hovered,
     prelude::*,
-    ui_widgets::{Activate, Button, observe},
+    ui_widgets::{Button, observe},
 };
 
 use crate::SoundOn;
+use crate::Clicked;
 use crate::intro::{FRAME_ASPECT, Screen, smoothstep};
 use crate::levels::{CurrentLevel, Levels};
 
@@ -113,7 +114,7 @@ fn spawn_menu(mut commands: Commands, assets: Res<AssetServer>, levels: Res<Leve
             ImageNode::new(assets.load("intro/logo.png")),
             Button,
             Logo,
-            observe(|_: On<Activate>, mut menu: ResMut<Menu>| {
+            observe(|_: On<Clicked>, mut menu: ResMut<Menu>| {
                 let (count, last) = menu.taps;
                 menu.taps = (if menu.time - last < 1.0 { count + 1 } else { 1 }, menu.time);
             }),
@@ -156,7 +157,7 @@ fn spawn_menu(mut commands: Commands, assets: Res<AssetServer>, levels: Res<Leve
                     },
                     UiTransform::default(),
                     Card(i),
-                    observe(move |_: On<Activate>, levels: Res<Levels>, unlocked: Res<Unlocked>, mut menu: ResMut<Menu>| {
+                    observe(move |_: On<Clicked>, levels: Res<Levels>, unlocked: Res<Unlocked>, mut menu: ResMut<Menu>| {
                         if menu.leaving.is_none() && menu.time > 0.6 {
                             menu.selected = i;
                             choose(&mut menu, &levels, &unlocked);

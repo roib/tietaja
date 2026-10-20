@@ -82,6 +82,7 @@ pub enum EffectKind {
     Aurora,
     Spirit,
     Streak,
+    Twinkle,
 }
 
 impl EffectKind {
@@ -98,6 +99,7 @@ impl EffectKind {
             "aurora" => Self::Aurora,
             "spirit" => Self::Spirit,
             "streak" => Self::Streak,
+            "twinkle" => Self::Twinkle,
             _ => return None,
         })
     }
@@ -937,61 +939,28 @@ mod tests {
     fn sauna_walkthrough_wins_the_game() {
         let story = Story::parse(SAUNA).unwrap();
         let mut s = new_game(&story);
-        let intro = story.intro.clone().unwrap();
-        play(&story, &mut s, &intro, &[]);
+        let has = |s: &GameState, item: &str| s.inventory.iter().any(|i| i == item);
+        play(&story, &mut s, story.intro.as_deref().unwrap(), &[]);
 
-        // The steam bites; Kyllikki explains what the keeper wants.
-        interact(&story, &mut s, Verb::Use, None, "kiuas");
-        assert!(s.flags.contains("felt_bite"));
-        play(&story, &mut s, "talk_kyllikki", &["The steam in there bites", "Goodbye"]);
-        assert!(s.flags.contains("knows_amends"));
+        // Kyllikki names the three gifts.
+        play(&story, &mut s, "talk_kyllikki", &["I'll go"]);
+        assert!(s.flags.contains("knows_gifts"));
 
-        // Who offended it: the feather, the magpie, and Kyllikki's confession.
-        interact(&story, &mut s, Verb::Take, None, "feather");
-        interact(&story, &mut s, Verb::Use, Some("feather"), "kyllikki");
-        assert!(!s.flags.contains("knows_culprit"), "not before hearing the magpie");
-        interact(&story, &mut s, Verb::Talk, None, "magpie");
-        interact(&story, &mut s, Verb::Use, Some("feather"), "kyllikki");
-        assert!(s.flags.contains("knows_culprit"));
-        play(&story, &mut s, "talk_kyllikki", &["Will you apologise", "Goodbye"]);
-        assert!(!s.flags.contains("kyllikki_in_sauna"), "not until the sauna is ready");
-
-        // Clean water.
+        // Water: the bucket, filled at the lake, thrown on the stove.
         interact(&story, &mut s, Verb::Take, None, "bucket");
         interact(&story, &mut s, Verb::Use, Some("bucket"), "lake");
-        assert!(s.inventory.contains(&"water".to_string()));
-
-        // A vihta: silver for the grove, twigs from the birch, bound by Kyllikki.
-        interact(&story, &mut s, Verb::Take, None, "birch");
-        assert!(!s.inventory.contains(&"twigs".to_string()), "the grove gives nothing for free");
-        interact(&story, &mut s, Verb::Take, None, "coin");
-        interact(&story, &mut s, Verb::Use, Some("coin"), "stone");
-        interact(&story, &mut s, Verb::Take, None, "birch");
-        interact(&story, &mut s, Verb::Use, Some("twigs"), "kyllikki");
-        assert!(s.inventory.contains(&"vihta".to_string()));
-
-        // Grandfather's words, once the smoke clears.
-        interact(&story, &mut s, Verb::Look, None, "beam");
-        assert!(!s.flags.contains("knows_loyly"));
-        interact(&story, &mut s, Verb::Use, None, "vent");
-        interact(&story, &mut s, Verb::Look, None, "beam");
-        assert!(s.flags.contains("knows_loyly"));
-
-        // The vihta can't be left, nor the water thrown, before the apology.
-        interact(&story, &mut s, Verb::Use, Some("vihta"), "benches");
-        assert!(!s.flags.contains("vihta_left"));
-        interact(&story, &mut s, Verb::Use, Some("water"), "kiuas");
-        assert!(!s.won);
-
-        // Kyllikki comes to the sauna, and has to say it properly.
-        play(&story, &mut s, "talk_kyllikki", &["The sauna's ready"]);
-        assert!(s.flags.contains("kyllikki_in_sauna"));
-        let said = play(&story, &mut s, "talk_kyllikki", &["Just tell it", "Tell it the magpie", "Ask its forgiveness"]);
-        assert!(said.iter().filter(|l| l.starts_with("Keeper: H")).count() == 2, "{said:?}");
-        assert!(s.flags.contains("apologized"));
-
-        interact(&story, &mut s, Verb::Use, Some("vihta"), "benches");
         let said = interact(&story, &mut s, Verb::Use, Some("water"), "kiuas");
+        assert!(s.flags.contains("gift_water"));
+        assert!(said.iter().any(|l| l.contains("Still to do: a vihta")), "it says what's left: {said:?}");
+
+        // A kind word: the silly answers just let you try again.
+        play(&story, &mut s, "talk_keeper", &["Hiss back", "Tell it to cheer up", "Say sorry nicely"]);
+        assert!(s.flags.contains("gift_word") && !s.won);
+
+        // The vihta, straight from the birch, laid on the benches: the last gift wins.
+        interact(&story, &mut s, Verb::Take, None, "birch");
+        assert!(has(&s, "vihta"));
+        let said = interact(&story, &mut s, Verb::Use, Some("vihta"), "benches");
         assert!(said.iter().any(|l| l.contains("Grandfather?")));
         assert!(s.won);
     }

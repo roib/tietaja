@@ -13,7 +13,7 @@ use bevy::{
     picking::hover::Hovered,
     prelude::*,
     sprite::Anchor,
-    ui_widgets::{Activate, Button, observe},
+    ui_widgets::{Button, observe},
 };
 use intro::{IntroPlugin, Screen, smoothstep};
 use levels::{CurrentLevel, Levels};
@@ -229,6 +229,8 @@ fn main() {
         .add_systems(OnEnter(Screen::Intro), start_level)
         .add_systems(OnExit(Screen::Playing), stop_music)
         .add_systems(Update, (apply_font, toggle_sound, play_music.run_if(in_state(Screen::Playing)), play_babble, scale_ui))
+        // After the room handles the click, so a choice picked with it isn't skipped by it too.
+        .add_systems(Update, click_buttons.after(handle_pointer))
         .add_systems(
             Update,
             (
@@ -251,6 +253,36 @@ fn main() {
                 .after(run_dialogue),
         )
         .run();
+}
+
+/// A button was clicked or tapped. Sent by `click_buttons` rather than relying on the UI
+/// widgets' own press-and-release pairing, which drops a click whose press and release
+/// land in the same frame (a quick tap).
+#[derive(EntityEvent)]
+pub struct Clicked {
+    pub entity: Entity,
+}
+
+/// On a left click or a tap, click whichever button is under it, tested against the
+/// buttons' laid-out rectangles (hover state can lag a frame behind a tap).
+pub fn click_buttons(
+    mouse: Res<ButtonInput<MouseButton>>,
+    touches: Res<Touches>,
+    window: Single<&Window>,
+    buttons: Query<(Entity, &ComputedNode, &UiGlobalTransform, &InheritedVisibility), With<Button>>,
+    mut commands: Commands,
+) {
+    let tap = touches.iter_just_pressed().next().map(|t| t.position());
+    let pointer = if mouse.just_pressed(MouseButton::Left) { window.cursor_position() } else { tap };
+    let Some(pointer) = pointer else {
+        return;
+    };
+    let point = pointer * window.scale_factor(); // laid out in physical pixels
+    for (entity, node, transform, visible) in &buttons {
+        if visible.get() && node.size() != Vec2::ZERO && node.contains_point(*transform, point) {
+            commands.trigger(Clicked { entity });
+        }
+    }
 }
 
 /// Room pixels (top-left origin, y down) to world units (centered, y up).
@@ -368,7 +400,7 @@ fn setup(mut commands: Commands, assets: Res<AssetServer>, levels: Res<Levels>) 
                     Node { width: percent(48), padding: UiRect::all(px(4)), ..default() },
                     VerbButton(verb),
                     children![(Text::new(verb.label()), TextFont { font_size: FontSize::Px(24.0), ..default() }, TextColor(VERB_COLOR))],
-                    observe(move |_: On<Activate>, mut ui: ResMut<Ui>| {
+                    observe(move |_: On<Clicked>, mut ui: ResMut<Ui>| {
                         ui.verb = if ui.verb == verb { Verb::Walk } else { verb };
                         ui.held = None;
                     }),
@@ -753,7 +785,7 @@ fn sync_inventory(
                 BorderColor::all(VERB_COLOR),
                 ItemButton(id.clone()),
                 children![(ImageNode::new(assets.load(item.icon.clone())), Node { width: percent(100), height: percent(100), ..default() })],
-                observe(move |_: On<Activate>, story: Res<StoryRes>, mut ui: ResMut<Ui>, mut talk: ResMut<Talk>| {
+                observe(move |_: On<Clicked>, story: Res<StoryRes>, mut ui: ResMut<Ui>, mut talk: ResMut<Talk>| {
                     on_item_clicked(&id, &story.0, &mut ui, &mut talk);
                 }),
             ));
@@ -796,7 +828,7 @@ fn sync_choices(mut commands: Commands, talk: Res<Talk>, panel: Single<(Entity, 
                 Hovered::default(),
                 Node::default(),
                 children![(Text::new(format!("> {}", choice.text)), TextFont { font_size: FontSize::Px(22.0), ..default() }, TextColor(CHOICE_COLOR))],
-                observe(move |_: On<Activate>, story: Res<StoryRes>, mut talk: ResMut<Talk>| {
+                observe(move |_: On<Clicked>, story: Res<StoryRes>, mut talk: ResMut<Talk>| {
                     if talk.choices.is_empty() {
                         return;
                     }

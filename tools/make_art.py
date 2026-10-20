@@ -2767,7 +2767,35 @@ def titles():
     title_logo(None, "intro/logo.png")
 
 
+def twinkle():
+    """A golden four-pointed star with a soft glow, twinkling over things worth finding."""
+    n = 128
+    img = Image.new("RGBA", (n, n))
+    glow = Image.new("L", (n, n), 0)
+    ImageDraw.Draw(glow).ellipse([n * 0.25, n * 0.25, n * 0.75, n * 0.75], fill=150)
+    halo = Image.new("RGBA", (n, n), (255, 210, 110, 255))
+    halo.putalpha(glow.filter(ImageFilter.GaussianBlur(n * 0.1)))
+    img.alpha_composite(halo)
+    star = Image.new("L", (n, n), 0)
+    sd = ImageDraw.Draw(star)
+    c, long, short = n / 2, n * 0.48, n * 0.07
+    for a in (0, math.pi / 2):
+        pts = []
+        for k, r in enumerate((long, short, long, short)):
+            ang = a + k * math.pi / 2
+            pts.append((c + math.cos(ang) * r, c + math.sin(ang) * r))
+        sd.polygon(pts, fill=255)
+    for a in (math.pi / 4, 3 * math.pi / 4):  # shorter rays between the long ones
+        pts = [(c + math.cos(a + k * math.pi / 2) * (n * 0.2 if k % 2 == 0 else short * 0.7), c + math.sin(a + k * math.pi / 2) * (n * 0.2 if k % 2 == 0 else short * 0.7)) for k in range(4)]
+        sd.polygon(pts, fill=200)
+    core = Image.new("RGBA", (n, n), (255, 246, 210, 255))
+    core.putalpha(star.filter(ImageFilter.GaussianBlur(1.2)))
+    img.alpha_composite(core)
+    save(img, "effects/twinkle.png")
+
+
 def sauna_tale():
+    twinkle()
     intro_dusk()
     window_glow()
     titles()

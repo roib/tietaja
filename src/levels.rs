@@ -139,7 +139,7 @@ const SAUNA_INTRO: IntroDef = IntroDef {
     runners: &[],
     captions: &[
         (3.4, 8.6, "Every sauna has a keeper, living under the benches."),
-        (9.4, 14.8, "In the sauna, you behave as you would in church."),
+        (9.4, 14.8, "The sauna is the keeper's home, so you mind your manners there."),
         (15.8, 20.4, "But one Saturday, somebody forgot."),
     ],
     hit: 28.0,

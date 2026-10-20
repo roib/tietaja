@@ -112,6 +112,7 @@ struct EffectArt {
     snow: Handle<Image>,
     aurora: [Handle<Image>; 3],
     streak: Handle<Image>,
+    twinkle: Handle<Image>,
 }
 
 /// Every room's art, loaded at startup and held for the whole game. Otherwise a room's
@@ -319,6 +320,7 @@ fn load_effect_art(mut commands: Commands, assets: Res<AssetServer>) {
             snow: assets.load("effects/snow.png"),
             aurora: [0, 1, 2].map(|i| assets.load(format!("effects/aurora_{i}.png"))),
             streak: assets.load("effects/fox_streak.png"),
+            twinkle: assets.load("effects/twinkle.png"),
     });
 }
 
@@ -326,6 +328,7 @@ impl EffectArt {
     fn image(&self, kind: EffectKind) -> Handle<Image> {
         match kind {
             EffectKind::Sparkles => self.sparkle.clone(),
+            EffectKind::Twinkle => self.twinkle.clone(),
             EffectKind::Motes => self.mote.clone(),
             EffectKind::Smoke => self.smoke.clone(),
             EffectKind::Sparks | EffectKind::Spirit | EffectKind::Streak => self.spark.clone(),
@@ -346,6 +349,7 @@ fn look(kind: EffectKind, rect: RoomRect, count: u32) -> (Vec2, f32) {
         EffectKind::Aurora => (Vec2::new(rect.w / count.max(1) as f32 * 2.2, rect.h), -0.8),
         EffectKind::Spirit => (Vec2::splat(1.3), 1.3),
         EffectKind::Streak => (Vec2::splat(1.4), 1.4),
+        EffectKind::Twinkle => (Vec2::splat(10.0), 2.4),
         EffectKind::Sparkles => (Vec2::splat(3.0), 0.5),
         EffectKind::Motes => (Vec2::splat(1.6), 2.5),
         EffectKind::Smoke => (Vec2::splat(5.0), 0.6),
@@ -503,6 +507,23 @@ fn animate_effects(
                     let k = glints.fract();
                     alpha = (1.0 - (k * 2.0 - 1.0).abs()).powi(6);
                     scale = 0.6 + alpha * 0.6;
+                }
+                EffectKind::Twinkle => {
+                    // A golden star twinkling over something worth finding: slower and
+                    // bigger than a glint on water, so young players notice it.
+                    let cycle = 1.4;
+                    let glints = (p.age + p.phase * 0.4) / cycle;
+                    if glints as u32 != p.cycle {
+                        p.cycle = glints as u32;
+                        p.pos = Vec2::new(r.x + next_random(&mut rng) * r.w, r.y + next_random(&mut rng) * r.h);
+                    }
+                    let k = glints.fract();
+                    let a = (1.0 - (k * 2.0 - 1.0).abs()).powi(2);
+                    transform.translation = room_to_world(p.pos).extend(depth);
+                    transform.scale = Vec3::splat(0.4 + a * 0.8);
+                    transform.rotation = Quat::from_rotation_z(k * 1.2);
+                    sprite.color = Color::srgba(1.0, 1.0, 1.0, a);
+                    continue;
                 }
                 EffectKind::Motes => {
                     // Dust turning slowly in a sunbeam.
