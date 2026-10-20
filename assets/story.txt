@@ -28,8 +28,8 @@
 #   title: <Name>                            the tale's name, on the menu
 #   ending: <text>                           shown once the tale is won
 #   player: <Name>                           who the player is
-#   player_art: <path prefix>                her sprites, <prefix>_stand.png and
-#                                            <prefix>_walk_0..3.png (default chars/vilja)
+#   player_art: <path prefix>                her sprites, <prefix>_stand.webp and
+#                                            <prefix>_walk_0..3.webp (default chars/vilja)
 #   start: <room> <x>                        where the game begins
 #   intro: <node>                            node run when the game starts
 #   ending_music: <file>                     music after `win`
@@ -63,14 +63,14 @@ character Kyllikki: #f0c46a | voice voices/kyllikki 0.1
 character Magpie: #9ec3ff | voice voices/magpie 0.12
 character Voice: #a8f0b0 | voice voices/spirit 0.3
 
-item bread: Rye bread | items/bread.png
-item button: Bronze button | items/button.png
-item spindle: Spindle | items/spindle.png
-item tinder: Tinder fungus | items/tinder.png
+item bread: Rye bread | items/bread.webp
+item button: Bronze button | items/button.webp
+item spindle: Spindle | items/spindle.webp
+item tinder: Tinder fungus | items/tinder.webp
 
 room village: Kylä, the village
-  background: rooms/village.png
-  sky: rooms/village_sky.png
+  background: rooms/village.webp
+  sky: rooms/village_sky.webp
   light: #ffe4d8
   music: music/village.ogg
   effect birds: 0 8 320 40
@@ -83,15 +83,15 @@ room village: Kylä, the village
   hotspot house: Kyllikki's house | 180 30 124 74
   hotspot hearth: Cold hearth | 130 98 44 24
   hotspot stump: Stump | 46 101 24 19
-  hotspot kyllikki: Old Kyllikki | 228 68 18 48 | sprite chars/kyllikki.png
-  hotspot bread: Rye bread | 51 97 14 8 | sprite objects/bread.png | if !took_bread
-  hotspot button: Something shiny | 176 126 6 6 | sprite objects/button.png | if !took_button
-  hotspot fire: Fire | 137 89 30 22 | sprite objects/fire_{}.png | frames 6 10 | if fire_lit
+  hotspot kyllikki: Old Kyllikki | 228 68 18 48 | sprite chars/kyllikki.webp
+  hotspot bread: Rye bread | 51 97 14 8 | sprite objects/bread.webp | if !took_bread
+  hotspot button: Something shiny | 176 126 6 6 | sprite objects/button.webp | if !took_button
+  hotspot fire: Fire | 137 89 30 22 | sprite objects/fire_{}.webp | frames 6 10 | if fire_lit
   exit path: Forest path | 304 60 16 84 | to path 20
 
 room path: Polku, the forest path
-  background: rooms/path.png
-  sky: rooms/path_sky.png
+  background: rooms/path.webp
+  sky: rooms/path_sky.webp
   light: #ffe2d0
   music: music/path.ogg
   effect birds: 140 10 180 50
@@ -99,13 +99,13 @@ room path: Polku, the forest path
   floor: 118 140
   hotspot spruce: Old spruce | 128 0 64 112
   hotspot anthill: Anthill | 230 100 40 22
-  hotspot magpie: Magpie | 176 40 16 12 | sprite chars/magpie.png | if !magpie_gone
+  hotspot magpie: Magpie | 176 40 16 12 | sprite chars/magpie.webp | if !magpie_gone
   exit village: Back to the village | 0 60 16 84 | to village 296
   exit grove: Deeper into the forest | 304 60 16 84 | to grove 20
 
 room grove: Hiisi, the sacred grove
-  background: rooms/grove.png
-  sky: rooms/grove_sky.png
+  background: rooms/grove.webp
+  sky: rooms/grove_sky.webp
   light: #dfe6e0
   music: music/grove.ogg
   effect leaves: 120 0 130 100 | count 8
@@ -114,8 +114,8 @@ room grove: Hiisi, the sacred grove
   floor: 114 140
   hotspot birch: Ancient birch | 186 0 46 114
   hotspot stone: Offering stone | 98 98 44 24
-  hotspot tinder: Tinder fungus | 210 64 14 8 | sprite objects/tinder.png | if !took_tinder
-  hotspot skull: Bear skull | 250 56 14 12 | sprite objects/skull.png
+  hotspot tinder: Tinder fungus | 210 64 14 8 | sprite objects/tinder.webp | if !took_tinder
+  hotspot skull: Bear skull | 250 56 14 12 | sprite objects/skull.webp
   exit path: Back to the path | 0 60 16 84 | to path 296
 
 # ---------------------------------------------------------------- defaults

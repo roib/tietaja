@@ -298,8 +298,8 @@ fn setup(mut commands: Commands, assets: Res<AssetServer>, levels: Res<Levels>) 
     // Each tale's look for the player, all loaded up front.
     let frames = levels.0.iter().map(|level| {
         let art = &level.story.player_art;
-        let frames = std::iter::once(assets.load(format!("{art}_stand.png")))
-            .chain((0..4).map(|i| assets.load(format!("{art}_walk_{i}.png"))))
+        let frames = std::iter::once(assets.load(format!("{art}_stand.webp")))
+            .chain((0..4).map(|i| assets.load(format!("{art}_walk_{i}.webp"))))
             .collect();
         (art.clone(), frames)
     });
@@ -342,7 +342,7 @@ fn setup(mut commands: Commands, assets: Res<AssetServer>, levels: Res<Levels>) 
         RenderLayers::layer(PLAYER_LAYER),
         // A soft shadow at her feet, cast to the right like the painted shadows.
         children![(
-            Sprite { custom_size: Some(Vec2::new(16.0, 4.0)), ..Sprite::from_image(assets.load("objects/shadow.png")) },
+            Sprite { custom_size: Some(Vec2::new(16.0, 4.0)), ..Sprite::from_image(assets.load("objects/shadow.webp")) },
             Transform::from_xyz(3.0, 0.5, -0.0005),
             RenderLayers::layer(PLAYER_LAYER),
         )],

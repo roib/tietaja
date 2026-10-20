@@ -807,8 +807,8 @@ def camp():
     glow_pool(light, s(161), s(110), s(26), s(22), FIRELIGHT, 70, s(8))
     glow_pool(light, s(120), s(100), s(30), s(26), FIRELIGHT, 40, s(10))  # on the kota's side and the rack
     kota_light(light, door, s(66), s(38))
-    save_night_room(img, rng, "rooms/camp.png", open_sky, light, detail=figures)
-    night_sky_layer("rooms/camp_sky.png", 302, 0.66)
+    save_night_room(img, rng, "rooms/camp.webp", open_sky, light, detail=figures)
+    night_sky_layer("rooms/camp_sky.webp", 302, 0.66)
 
 
 # ---------------------------------------------------------------- the lake
@@ -864,8 +864,8 @@ def lake():
     open_sky = open_sky_mask(sky_only, img)
     light = black()
     glow_pool(light, s(160), s(108), s(160), s(12), (60, 90, 140), 40, s(20))  # starlight on the ice
-    save_night_room(img, rng, "rooms/lake.png", open_sky, light)
-    night_sky_layer("rooms/lake_sky.png", 312, 0.58)
+    save_night_room(img, rng, "rooms/lake.webp", open_sky, light)
+    night_sky_layer("rooms/lake_sky.webp", 312, 0.58)
 
 
 # ---------------------------------------------------------------- the forest
@@ -987,8 +987,8 @@ def forest():
     light.alpha_composite(wl.filter(ImageFilter.GaussianBlur(s(0.6))))
     light.alpha_composite(wl.filter(ImageFilter.GaussianBlur(s(8))))
     glow_pool(light, (win[0] + win[2]) / 2, s(118), s(16), s(4), FIRELIGHT, 60, s(5))
-    save_night_room(img, rng, "rooms/forest.png", open_sky, light)
-    night_sky_layer("rooms/forest_sky.png", 322, 0.72, aurora=0.15)
+    save_night_room(img, rng, "rooms/forest.webp", open_sky, light)
+    night_sky_layer("rooms/forest_sky.webp", 322, 0.72, aurora=0.15)
 
 
 # ---------------------------------------------------------------- the fell top
@@ -1118,8 +1118,8 @@ def fell():
     light = black()
     light = screen(light, fox_tracks(img, light, rng, [(20, 140), (100, 134), (176, 124), (240, 120), (290, 120)], 26, size=1.4))
     open_sky = open_sky_mask(sky_only, img)
-    save_night_room(img, rng, "rooms/fell.png", open_sky, light)
-    night_sky_layer("rooms/fell_sky.png", 332, 0.72, aurora=0.3)
+    save_night_room(img, rng, "rooms/fell.webp", open_sky, light)
+    night_sky_layer("rooms/fell_sky.webp", 332, 0.72, aurora=0.3)
 
 
 # ---------------------------------------------------------------- the den
@@ -1224,7 +1224,7 @@ def den():
     shaft = Image.new("RGBA", light.size)  # its cold light laid across the floor
     ImageDraw.Draw(shaft).polygon([(s(20), s(40)), (s(36), s(60)), (s(190), s(130)), (s(120), s(144)), (s(10), s(130))], fill=(60, 90, 150, 70))
     light.alpha_composite(shaft.filter(ImageFilter.GaussianBlur(s(8))))
-    save_night_room(img, rng, "rooms/den.png", None, light)
+    save_night_room(img, rng, "rooms/den.webp", None, light)
 
 
 # ---------------------------------------------------------------- the fox's fire
@@ -1553,14 +1553,14 @@ def den_tail_frames():
         glow.alpha_composite(g.filter(ImageFilter.GaussianBlur(3 * k)))
         out = as_glow(glow, 1.6)
         out.alpha_composite(body)
-        A.save(out, f"objects/foxtail_{frame}.png")
+        A.save(out, f"objects/foxtail_{frame}.webp")
 
 
 def firefox_frames():
     """The fire fox on the fell, waiting: the painted fox, its tail of fire flickering
     through four frames."""
     for frame in range(4):
-        A.save(fire_fox("stand", 400 + frame, sparks=60), f"objects/firefox_{frame}.png")
+        A.save(fire_fox("stand", 400 + frame, sparks=60), f"objects/firefox_{frame}.webp")
 
 
 # ---------------------------------------------------------------- figures
@@ -1820,10 +1820,10 @@ def fur_drawing(w, h):
 
 
 def objects():
-    A.painted_figure(lambda: snowshoes_drawing(12, 28), "objects/snowshoes.png", 501, brushes=A.SMALL_BRUSHES)
-    A.painted_figure(lambda: line_drawing(12, 8), "objects/line.png", 502, brushes=A.SMALL_BRUSHES)
-    A.painted_figure(lambda: snare_drawing(10, 12), "objects/snare.png", 503, brushes=A.SMALL_BRUSHES, rim=False)
-    A.painted_figure(fox_curled, "objects/fox_grey.png", 504, brushes=A.SMALL_BRUSHES)
+    A.painted_figure(lambda: snowshoes_drawing(12, 28), "objects/snowshoes.webp", 501, brushes=A.SMALL_BRUSHES)
+    A.painted_figure(lambda: line_drawing(12, 8), "objects/line.webp", 502, brushes=A.SMALL_BRUSHES)
+    A.painted_figure(lambda: snare_drawing(10, 12), "objects/snare.webp", 503, brushes=A.SMALL_BRUSHES, rim=False)
+    A.painted_figure(fox_curled, "objects/fox_grey.webp", 504, brushes=A.SMALL_BRUSHES)
     den_tail_frames()
     firefox_frames()
 
@@ -1836,15 +1836,15 @@ def items():
                                   ("fish", lambda: fish_drawing(16, 16), 515, True),
                                   ("puukko", lambda: puukko_drawing(16, 16), 516, True),
                                   ("fur", lambda: fur_drawing(16, 16), 517, False)):
-        A.painted_figure(draw, f"items/{name}.png", seed, brushes=A.SMALL_BRUSHES, rim=rim)
+        A.painted_figure(draw, f"items/{name}.webp", seed, brushes=A.SMALL_BRUSHES, rim=rim)
 
 
 def characters():
-    A.painted_figure(mummo, "chars/mummo.png", 521)
-    A.painted_figure(jussi, "chars/jussi.png", 522)
-    A.painted_figure(vilja_winter_standing, "chars/vilja_winter_stand.png", 11)
+    A.painted_figure(mummo, "chars/mummo.webp", 521)
+    A.painted_figure(jussi, "chars/jussi.webp", 522)
+    A.painted_figure(vilja_winter_standing, "chars/vilja_winter_stand.webp", 11)
     for frame in range(4):
-        A.painted_figure(lambda: vilja_winter_walking(frame), f"chars/vilja_winter_walk_{frame}.png", 15 + frame)
+        A.painted_figure(lambda: vilja_winter_walking(frame), f"chars/vilja_winter_walk_{frame}.webp", 15 + frame)
 
 
 def effects():
@@ -1852,7 +1852,7 @@ def effects():
     flake = Image.new("RGBA", (16, 16))
     fd = ImageDraw.Draw(flake)
     fd.ellipse([4, 4, 12, 12], fill=(236, 242, 255, 255))
-    A.save(flake.filter(ImageFilter.GaussianBlur(1.6)), "effects/snow.png")
+    A.save(flake.filter(ImageFilter.GaussianBlur(1.6)), "effects/snow.webp")
     size = (440, 300)
     edge = Image.new("L", size)
     ed = ImageDraw.Draw(edge)
@@ -1870,9 +1870,9 @@ def effects():
         light.alpha_composite(lay.filter(ImageFilter.GaussianBlur(10)))
         img = as_glow(light, 2.5)
         img.putalpha(ImageChops.multiply(img.getchannel("A"), edge))
-        A.save(img, f"effects/aurora_{i}.png")
+        A.save(img, f"effects/aurora_{i}.webp")
     # The fire fox leaping across the sky, facing right, its tail streaming out behind.
-    A.save(fire_fox("leap", 541, detail=1, sparks=40), "effects/fox_streak.png")
+    A.save(fire_fox("leap", 541, detail=1, sparks=40), "effects/fox_streak.webp")
 
 
 # ---------------------------------------------------------------- the intro, card and title
@@ -1996,7 +1996,7 @@ def intro_fells():
         light = black()
         kota_light(light, door, s(756), s(110))
         img = screen(img, light)
-        A.save(img.convert("RGB"), "intro/fells.png")
+        A.save(img.convert("RGB"), "intro/fells.webp")
 
         # The blazing sky over the whole panorama, and the fox's trail of sparks climbing
         # from the ridge into it.
@@ -2023,10 +2023,10 @@ def intro_fells():
         light.alpha_composite(trail.filter(ImageFilter.GaussianBlur(s(3))))
         light.alpha_composite(trail.filter(ImageFilter.GaussianBlur(s(0.6))))
         light.alpha_composite(trail)
-        A.save(as_glow(light, 1.8), "intro/aurora.png")
+        A.save(as_glow(light, 1.8), "intro/aurora.webp")
 
     for frame in range(4):  # the fox bounding along the ridge and up into the sky
-        A.save(fire_fox(("run", frame), 560 + frame, detail=2, heat=1.2, sparks=80), f"intro/fox_run_{frame}.png")
+        A.save(fire_fox(("run", frame), 560 + frame, detail=2, heat=1.2, sparks=80), f"intro/fox_run_{frame}.webp")
     # The fox's last spark, glimmering in the snow.
     size = 256
     img = Image.new("RGBA", (size, size))
@@ -2036,7 +2036,7 @@ def intro_fells():
         lay = Image.new("RGBA", (size, size), col + (255,))
         lay.putalpha(m.filter(ImageFilter.GaussianBlur(r * 0.45)))
         img.alpha_composite(lay)
-    A.save(img, "intro/spark.png")
+    A.save(img, "intro/spark.webp")
 
 
 def card():
@@ -2087,11 +2087,11 @@ def card():
     cold.alpha_composite(flames)
     painted.alpha_composite(cold, (int(fx), int(fy)))
     crop = painted.crop((s(70), 0, s(70) + s(192), s(144)))
-    A.save(crop.convert("RGB").resize((640, 480), Image.LANCZOS), "cards/fox.png")
+    A.save(crop.convert("RGB").resize((640, 480), Image.LANCZOS), "cards/fox.webp")
 
 
 def title():
-    A.title_logo("THE FIRE FOX", "intro/title_fox.png")
+    A.title_logo("THE FIRE FOX", "intro/title_fox.webp")
 
 
 def rooms():

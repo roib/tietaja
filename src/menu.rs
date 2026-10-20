@@ -97,7 +97,7 @@ fn spawn_menu(mut commands: Commands, assets: Res<AssetServer>, levels: Res<Leve
     let frame = commands.spawn((Node { position_type: PositionType::Absolute, overflow: Overflow::clip(), ..default() }, MenuFrame)).id();
     commands.entity(frame).with_children(|frame| {
         frame.spawn((
-            ImageNode::new(assets.load("intro/night.png")),
+            ImageNode::new(assets.load("intro/night.webp")),
             Node { position_type: PositionType::Absolute, width: percent(100), aspect_ratio: Some(1.0 / BACKDROP_ASPECT), ..default() },
             Backdrop,
         ));
@@ -111,7 +111,7 @@ fn spawn_menu(mut commands: Commands, assets: Res<AssetServer>, levels: Res<Leve
             ])),
         ));
         frame.spawn((
-            ImageNode::new(assets.load("intro/logo.png")),
+            ImageNode::new(assets.load("intro/logo.webp")),
             Button,
             Logo,
             observe(|_: On<Clicked>, mut menu: ResMut<Menu>| {

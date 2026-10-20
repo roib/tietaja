@@ -18,14 +18,14 @@ character Vilja: #f4f0e6 | voice voices/vilja 0.075
 character Mummo: #f0c46a | voice voices/mummo 0.11
 character Jussi: #e0a878 | voice voices/jussi 0.1
 
-item snowshoes: Snowshoes | items/snowshoes.png
-item ember: Ember in a birch-bark box | items/ember.png
-item puukko: Puukko | items/puukko.png
-item fur: Glowing fur | items/fur.png
+item snowshoes: Snowshoes | items/snowshoes.webp
+item ember: Ember in a birch-bark box | items/ember.webp
+item puukko: Puukko | items/puukko.webp
+item fur: Glowing fur | items/fur.webp
 
 room camp: Kota, the herders' camp
-  background: rooms/camp.png
-  sky: rooms/camp_sky.png
+  background: rooms/camp.webp
+  sky: rooms/camp_sky.webp
   light: #c8d6ff
   music: music/fells.ogg
   effect snow: 0 0 320 144 | count 70
@@ -36,17 +36,17 @@ room camp: Kota, the herders' camp
   effect twinkle: 180 60 30 40 | count 3 | if !knows_fox
   floor: 114 140
   hotspot kota: Kota | 18 32 96 82
-  hotspot snowshoes: Snowshoes | 100 84 12 28 | sprite objects/snowshoes.png | if !knows_fox
+  hotspot snowshoes: Snowshoes | 100 84 12 28 | sprite objects/snowshoes.webp | if !knows_fox
   hotspot band: Woven band | 120 62 8 36
-  hotspot fire: Campfire | 146 100 30 22 | sprite objects/fire_{}.png | frames 6 10
-  hotspot mummo: Mummo | 186 70 18 46 | sprite chars/mummo.png
+  hotspot fire: Campfire | 146 100 30 22 | sprite objects/fire_{}.webp | frames 6 10
+  hotspot mummo: Mummo | 186 70 18 46 | sprite chars/mummo.webp
   hotspot reindeer: Reindeer | 226 84 86 30
   exit lake: Down to the lake | 0 60 12 84 | to lake 290
   exit forest: Into the forest | 308 60 12 84 | to forest 24
 
 room lake: Järvi, the frozen lake
-  background: rooms/lake.png
-  sky: rooms/lake_sky.png
+  background: rooms/lake.webp
+  sky: rooms/lake_sky.webp
   light: #c0d2ff
   music: music/fells.ogg
   effect snow: 0 0 320 144 | count 60
@@ -58,8 +58,8 @@ room lake: Järvi, the frozen lake
   exit camp: Back to the camp | 308 60 12 84 | to camp 24
 
 room forest: Korpi, the spruce forest
-  background: rooms/forest.png
-  sky: rooms/forest_sky.png
+  background: rooms/forest.webp
+  sky: rooms/forest_sky.webp
   light: #b8c8f0
   music: music/fells.ogg
   effect snow: 0 0 320 144 | count 50
@@ -69,15 +69,15 @@ room forest: Korpi, the spruce forest
   floor: 116 140
   hotspot cabin: Jussi's cabin | 196 30 110 84
   hotspot snares: Snares | 286 70 18 26
-  hotspot jussi: Jussi | 170 72 18 46 | sprite chars/jussi.png
+  hotspot jussi: Jussi | 170 72 18 46 | sprite chars/jussi.webp
   hotspot prints: Paw prints | 70 124 150 12
   hotspot drifts: Up to the fell | 306 50 14 94 | if !snowshoes
   exit fell: Up to the fell | 306 50 14 94 | to fell 30 | if snowshoes
   exit camp: Back to the camp | 0 60 12 84 | to camp 290
 
 room fell: Tunturi, the fell top
-  background: rooms/fell.png
-  sky: rooms/fell_sky.png
+  background: rooms/fell.webp
+  sky: rooms/fell_sky.webp
   light: #c4d4ff
   music: music/fell.ogg
   enter: fell_enter
@@ -96,23 +96,23 @@ room fell: Tunturi, the fell top
   hotspot hare: Hare-shaped spruce | 38 38 38 74
   hotspot owl: Owl-shaped spruce | 128 26 34 86
   hotspot bear: Bear-shaped spruce | 214 40 50 72
-  hotspot snare: Torn snare | 176 108 10 12 | sprite objects/snare.png | if !took_fur
-  hotspot fox: Fire fox | 220 86 60 30 | sprite objects/firefox_{}.png | frames 4 8 | if fox_lit !run_1 !sky_lit | glows
-  hotspot fox: Fire fox | 98 86 60 30 | sprite objects/firefox_{}.png | frames 4 8 | if run_1 !sky_lit | glows
+  hotspot snare: Torn snare | 176 108 10 12 | sprite objects/snare.webp | if !took_fur
+  hotspot fox: Fire fox | 220 86 60 30 | sprite objects/firefox_{}.webp | frames 4 8 | if fox_lit !run_1 !sky_lit | glows
+  hotspot fox: Fire fox | 98 86 60 30 | sprite objects/firefox_{}.webp | frames 4 8 | if run_1 !sky_lit | glows
   hotspot sky: The sky | 0 0 320 26
   exit den: Den in the rocks | 282 96 38 26 | to den 60
   exit forest: Back down to the forest | 0 60 12 84 | to forest 290
 
 room den: Kolo, the fox's den
-  background: rooms/den.png
+  background: rooms/den.webp
   light: #9cacd8
   music: music/fell.ogg
   enter: den_enter
   effect snow: 0 0 60 70 | count 10
   effect glow: 190 88 50 34 | if fox_out
   floor: 118 140
-  hotspot tail: A faint glow in the dark | 198 104 24 10 | sprite objects/foxtail_{}.png | frames 6 3 | if !fox_out
-  hotspot grey: Fox | 184 94 54 26 | sprite objects/fox_grey.png | if fox_out !fox_lit
+  hotspot tail: A faint glow in the dark | 198 104 24 10 | sprite objects/foxtail_{}.webp | frames 6 3 | if !fox_out
+  hotspot grey: Fox | 184 94 54 26 | sprite objects/fox_grey.webp | if fox_out !fox_lit
   hotspot roots: Roots | 120 20 120 30
   effect twinkle: 194 94 32 20 | count 3 | if !fox_out
   effect twinkle: 186 86 50 30 | count 3 | if fox_out !fox_lit

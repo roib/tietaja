@@ -238,7 +238,7 @@ pub struct Story {
     pub start: (String, f32),
     pub intro: Option<String>,
     pub ending_music: Option<String>,
-    /// The player's sprites: `<player_art>_stand.png` and `<player_art>_walk_0..3.png`.
+    /// The player's sprites: `<player_art>_stand.webp` and `<player_art>_walk_0..3.webp`.
     pub player_art: String,
     pub characters: HashMap<String, Character>,
     pub items: Vec<Item>,
@@ -769,8 +769,8 @@ mod tests {
             paths.extend(room.hotspots.iter().flat_map(|h| h.sprite_frames()));
         }
         paths.extend(story.ending_music.clone());
-        paths.push(format!("{}_stand.png", story.player_art));
-        paths.extend((0..4).map(|i| format!("{}_walk_{i}.png", story.player_art)));
+        paths.push(format!("{}_stand.webp", story.player_art));
+        paths.extend((0..4).map(|i| format!("{}_walk_{i}.webp", story.player_art)));
         paths.extend(story.items.iter().map(|i| i.icon.clone()));
         for voice in story.characters.values().filter_map(|c| c.voice.as_ref()) {
             paths.extend((0..VOICE_SYLLABLES).map(|i| format!("{}/{i}.ogg", voice.dir)));
@@ -786,23 +786,36 @@ mod tests {
     #[test]
     fn art_matches_room_and_hotspot_sizes() {
         const ART_SCALE: f32 = 4.0;
-        fn png_size(path: &std::path::Path) -> (u32, u32) {
-            let bytes = std::fs::read(path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
-            let be = |i: usize| u32::from_be_bytes(bytes[i..i + 4].try_into().unwrap());
-            (be(16), be(20))
+        /// An image's size from its header: WebP (lossy, lossless or extended) or PNG.
+        fn image_size(path: &std::path::Path) -> (u32, u32) {
+            let b = std::fs::read(path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+            let le16 = |i: usize| u32::from(u16::from_le_bytes([b[i], b[i + 1]]));
+            let le24 = |i: usize| u32::from_le_bytes([b[i], b[i + 1], b[i + 2], 0]);
+            match &b[12..16] {
+                b"VP8X" => (le24(24) + 1, le24(27) + 1),
+                b"VP8 " => (le16(26) & 0x3fff, le16(28) & 0x3fff),
+                b"VP8L" => {
+                    let bits = u32::from_le_bytes([b[21], b[22], b[23], b[24]]);
+                    ((bits & 0x3fff) + 1, ((bits >> 14) & 0x3fff) + 1)
+                }
+                _ => {
+                    let be = |i: usize| u32::from_be_bytes(b[i..i + 4].try_into().unwrap());
+                    (be(16), be(20))
+                }
+            }
         }
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets");
         let mut wrong = Vec::new();
         let stories: Vec<Story> = STORIES.iter().map(|(_, src)| Story::parse(src).unwrap()).collect();
         for room in stories.iter().flat_map(|story| &story.rooms) {
             let expected = ((ROOM_WIDTH * ART_SCALE) as u32, (ROOM_HEIGHT * ART_SCALE) as u32);
-            let actual = png_size(&root.join(&room.background));
+            let actual = image_size(&root.join(&room.background));
             if actual != expected {
                 wrong.push(format!("{}: {actual:?}, expected {expected:?}", room.background));
             }
             if let Some(sky) = &room.sky {
                 let expected = (expected.0 * 2, expected.1); // twice as wide, to drift across
-                let actual = png_size(&root.join(sky));
+                let actual = image_size(&root.join(sky));
                 if actual != expected {
                     wrong.push(format!("{sky}: {actual:?}, expected {expected:?}"));
                 }
@@ -811,7 +824,7 @@ mod tests {
                 let at = |k: f32| ((h.rect.w * ART_SCALE * k) as u32, (h.rect.h * ART_SCALE * k) as u32);
                 let (expected, detailed) = (at(1.0), at(2.0));
                 for sprite in h.sprite_frames() {
-                    let actual = png_size(&root.join(&sprite));
+                    let actual = image_size(&root.join(&sprite));
                     if actual != expected && actual != detailed {
                         wrong.push(format!("{sprite} (hotspot {}): {actual:?}, expected {expected:?}", h.id));
                     }
@@ -834,10 +847,10 @@ mod tests {
 
     #[test]
     fn animated_sprites_need_frames_and_a_numbered_path() {
-        let ok = "start: a 10\nroom a: A\n  hotspot f: F | 1 2 3 4 | sprite fire_{}.png | frames 3 10\n";
+        let ok = "start: a 10\nroom a: A\n  hotspot f: F | 1 2 3 4 | sprite fire_{}.webp | frames 3 10\n";
         let story = Story::parse(ok).unwrap();
-        assert_eq!(story.room("a").hotspots[0].sprite_frames(), ["fire_0.png", "fire_1.png", "fire_2.png"]);
-        let missing = Story::parse("start: a 10\nroom a: A\n  hotspot f: F | 1 2 3 4 | sprite fire_{}.png\n");
+        assert_eq!(story.room("a").hotspots[0].sprite_frames(), ["fire_0.webp", "fire_1.webp", "fire_2.webp"]);
+        let missing = Story::parse("start: a 10\nroom a: A\n  hotspot f: F | 1 2 3 4 | sprite fire_{}.webp\n");
         assert!(missing.unwrap_err().contains("animated sprite"));
     }
 

@@ -5,7 +5,7 @@ edition = "2024"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-bevy = { version = "0.20", default-features = false, features = ["2d", "ui", "png", "audio"] }
+bevy = { version = "0.20", default-features = false, features = ["2d", "ui", "png", "webp", "audio"] }
 # The wall clock, which std::time can't read in the browser (for timed releases).
 web-time = "1.1"
 

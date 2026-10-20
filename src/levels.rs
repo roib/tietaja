@@ -43,14 +43,14 @@ impl Levels {
         Ok(Levels(vec![
             Level {
                 numeral: "I",
-                card: "cards/fire.png",
+                card: "cards/fire.webp",
                 story: parse("story.txt", include_str!("../assets/story.txt"))?,
                 intro: FIRE_INTRO,
                 release: None,
             },
             Level {
                 numeral: "II",
-                card: "cards/sauna.png",
+                card: "cards/sauna.webp",
                 story: parse("sauna.txt", include_str!("../assets/sauna.txt"))?,
                 intro: SAUNA_INTRO,
                 // 6 am Pacific time.
@@ -58,7 +58,7 @@ impl Levels {
             },
             Level {
                 numeral: "III",
-                card: "cards/fox.png",
+                card: "cards/fox.webp",
                 story: parse("fox.txt", include_str!("../assets/fox.txt"))?,
                 intro: FOX_INTRO,
                 // 6 am Pacific time.
@@ -73,13 +73,13 @@ impl Levels {
 
 /// Night over the village, the last ember dying, the view tilting up to the northern lights.
 const FIRE_INTRO: IntroDef = IntroDef {
-    painting: "intro/night.png",
+    painting: "intro/night.webp",
     painting_aspect: 1440.0 / 1280.0,
     pan: &[(0.0, 0.0), (19.0, 0.06), (27.2, 1.0)],
     sideways: false,
     zoom: &[],
     glows: &[Glow {
-        image: "intro/ember.png",
+        image: "intro/ember.webp",
         center: Vec2::new(160.0 / 320.0, 342.0 / 360.0),
         width: 0.09,
         aspect: 1.0,
@@ -98,28 +98,28 @@ const FIRE_INTRO: IntroDef = IntroDef {
     music_tail: "music/intro_tail.ogg",
     music_length: 54.0,
     title_loop: "music/title.ogg",
-    title: "intro/title.png",
+    title: "intro/title.webp",
     flash: [1.0, 0.94, 0.78],
 };
 
 /// Dusk: down from the first stars to a sauna on the lake shore. Its window glows, then
 /// gutters out, and two eyes open in the dark.
 const SAUNA_INTRO: IntroDef = IntroDef {
-    painting: "intro/dusk.png",
+    painting: "intro/dusk.webp",
     painting_aspect: 1440.0 / 1280.0,
     pan: &[(0.0, 1.0), (3.0, 0.985), (15.0, 0.0)],
     sideways: false,
     zoom: &[],
     glows: &[
         Glow {
-            image: "intro/window.png",
+            image: "intro/window.webp",
             center: Vec2::new(205.0 / 320.0, 322.0 / 360.0),
             width: 0.11,
             aspect: 1.0,
             life: Life::Dies(21.0),
         },
         Glow {
-            image: "intro/eyes.png",
+            image: "intro/eyes.webp",
             center: Vec2::new(205.0 / 320.0, 322.0 / 360.0),
             width: 0.034,
             aspect: 0.4,
@@ -127,7 +127,7 @@ const SAUNA_INTRO: IntroDef = IntroDef {
         },
     ],
     wisps: &[Wisps {
-        image: "effects/smoke.png",
+        image: "effects/smoke.webp",
         origin: Vec2::new(183.0 / 320.0, 306.0 / 360.0),
         width: 0.022,
         count: 10,
@@ -148,14 +148,14 @@ const SAUNA_INTRO: IntroDef = IntroDef {
     music_tail: "music/intro_sauna_tail.ogg",
     music_length: 52.0,
     title_loop: "music/title_sauna.ogg",
-    title: "intro/title_sauna.png",
+    title: "intro/title_sauna.webp",
     flash: [1.0, 0.8, 0.58],
 };
 
 /// The polar night: down from a sky ablaze with the fox's fire to the fells and a herders'
 /// camp. The lights die away, and in the dark a single spark glimmers in the snow.
 const FOX_INTRO: IntroDef = IntroDef {
-    painting: "intro/fells.png",
+    painting: "intro/fells.webp",
     painting_aspect: FOX_PANORAMA.1 / FOX_PANORAMA.0,
     // Start close on the blazing sky over the fells, then sweep across to the camp.
     pan: &[(0.0, 0.0), (2.5, 0.0), (23.0, 1.0)],
@@ -163,14 +163,14 @@ const FOX_INTRO: IntroDef = IntroDef {
     zoom: &[(0.0, 1.3), (6.0, 1.18), (23.0, 1.0)],
     glows: &[
         Glow {
-            image: "intro/aurora.png",
+            image: "intro/aurora.webp",
             center: Vec2::new(0.5, 60.0 / FOX_PANORAMA.1),
             width: 1.0,
             aspect: 120.0 / FOX_PANORAMA.0,
             life: Life::Dies(17.0),
         },
         Glow {
-            image: "intro/spark.png",
+            image: "intro/spark.webp",
             center: Vec2::new(FOX_SPARK.0 / FOX_PANORAMA.0, FOX_SPARK.1 / FOX_PANORAMA.1),
             width: 12.0 / FOX_PANORAMA.0,
             aspect: 1.0,
@@ -178,7 +178,7 @@ const FOX_INTRO: IntroDef = IntroDef {
         },
     ],
     wisps: &[Wisps {
-        image: "effects/smoke.png",
+        image: "effects/smoke.webp",
         origin: Vec2::new(756.0 / FOX_PANORAMA.0, 106.0 / FOX_PANORAMA.1),
         width: 0.008,
         count: 10,
@@ -190,7 +190,7 @@ const FOX_INTRO: IntroDef = IntroDef {
     // The fox bounds along the ridge, then leaps up and runs off into the sky along its
     // trail of sparks, gone as the lights die.
     runners: &[Runner {
-        frames: &["intro/fox_run_0.png", "intro/fox_run_1.png", "intro/fox_run_2.png", "intro/fox_run_3.png"],
+        frames: &["intro/fox_run_0.webp", "intro/fox_run_1.webp", "intro/fox_run_2.webp", "intro/fox_run_3.webp"],
         fps: 10.0,
         width: 46.0 / FOX_PANORAMA.0,
         aspect: 0.5,
@@ -215,7 +215,7 @@ const FOX_INTRO: IntroDef = IntroDef {
     music_tail: "music/intro_fox_tail.ogg",
     music_length: 52.0,
     title_loop: "music/title_fox.ogg",
-    title: "intro/title_fox.png",
+    title: "intro/title_fox.webp",
     flash: [0.78, 1.0, 0.88],
 };
 

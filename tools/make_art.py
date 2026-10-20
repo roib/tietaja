@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Paints the placeholder art in assets/, in the manner of Werner Holmberg
+"""Paints the placeholder art in assets/ (as WebP), in the manner of Werner Holmberg
 (1830-1860): golden side light through spruces, warm sandy roads, mossy rocks,
-hazy distances and soft cumulus skies. Replace any PNG with real art.
+hazy distances and soft cumulus skies. Replace any image with real art.
 
 Everything is laid out in room units (a room is 320x144, the same top-left
 coordinates as the hotspot rectangles in assets/story.txt) and painted at
@@ -113,10 +113,18 @@ def dab(d, x, y, rx, ry, color, angle=0.0, points=8):
         d.polygon(pts, fill=color)
 
 
+# Art is saved as WebP: the paintings are soft and painterly, so lossy WebP at this quality
+# looks the same as PNG at a fraction of the size, which matters for the browser download.
+WEBP = {"quality": 90, "method": 6, "alpha_quality": 100, "exact": True}  # exact keeps colour under transparency, so edges don't fringe
+
+
 def save(img, path):
     out = ASSETS / path
     out.parent.mkdir(parents=True, exist_ok=True)
-    img.save(out)
+    if out.suffix == ".webp":
+        img.save(out, **WEBP)
+    else:
+        img.save(out)
 
 
 # ---------------------------------------------------------------- landscape pieces
@@ -952,8 +960,8 @@ def village():
     shade(light, rng, [(0, 0), (320, 0), (320, 60), (0, 40)], 60, 0, softness=20)  # the sky still cool overhead
     # The sun just above the hills on the left, its rays raking almost flat across the scene.
     light.alpha_composite(sunlight((s(-24), s(72)), [(-6, 4, 60), (0, 3, 70), (6, 4, 60), (12, 3, 45)], s(80), 140))
-    save_room(img, rng, "rooms/village.png", sky_mask(open_sky, img), light=light)
-    sky_layer("rooms/village_sky.png", 101, horizon=0.58, clouds=10, cloud_bottom=0.42)  # dawn colours from the palette
+    save_room(img, rng, "rooms/village.webp", sky_mask(open_sky, img), light=light)
+    sky_layer("rooms/village_sky.webp", 101, horizon=0.58, clouds=10, cloud_bottom=0.42)  # dawn colours from the palette
 
 
 def path():
@@ -1012,8 +1020,8 @@ def path():
     shade(light, rng, [(0, 0), (320, 0), (320, 50), (0, 30)], 60, 0, softness=20)
     # The sun low behind the left-hand woods, rays slanting through the trunks.
     light.alpha_composite(sunlight((s(-20), s(86)), [(-4, 3, 80), (3, 2.5, 75), (9, 3, 70), (15, 2, 50)], s(70), 120))
-    save_room(img, rng, "rooms/path.png", sky_mask(open_sky, img), 0.08, light=light)
-    sky_layer("rooms/path_sky.png", 102, 0.08, top=(118, 146, 194), horizon=0.6, clouds=12, cloud_bottom=0.5)
+    save_room(img, rng, "rooms/path.webp", sky_mask(open_sky, img), 0.08, light=light)
+    sky_layer("rooms/path_sky.webp", 102, 0.08, top=(118, 146, 194), horizon=0.6, clouds=12, cloud_bottom=0.5)
 
 
 def grove():
@@ -1061,8 +1069,8 @@ def grove():
     pool(light, 210, 90, 16, 40, 60)  # down the birch
     # Low dawn sun from the left, its shafts slanting between the trunks onto the stone.
     light.alpha_composite(sunlight((s(-20), s(50)), [(8, 6, 120), (15, 3, 80), (22, 4, 95), (3, 3, 70)], s(60), 90))
-    save_room(img, rng, "rooms/grove.png", sky_mask(open_sky, img), 0.05, light=light)
-    sky_layer("rooms/grove_sky.png", 103, 0.05, top=(124, 148, 172), haze=(240, 214, 204), horizon=0.6, clouds=4)
+    save_room(img, rng, "rooms/grove.webp", sky_mask(open_sky, img), 0.05, light=light)
+    sky_layer("rooms/grove_sky.webp", 103, 0.05, top=(124, 148, 172), haze=(240, 214, 204), horizon=0.6, clouds=4)
 
 
 # ---------------------------------------------------------------- intro
@@ -1171,7 +1179,7 @@ def intro_night():
             img.alpha_composite(layer)
     finally:
         H = base_h
-    save(img.convert("RGB"), "intro/night.png")
+    save(img.convert("RGB"), "intro/night.webp")
 
 
 INTRO_EMBER = (160, 342)  # room units within the night scene: where the last ember glows
@@ -1185,10 +1193,10 @@ def ember_glow():
         a = int(255 * (1 - t) ** 2.2)
         col = mix((255, 236, 170), (220, 70, 20), t)
         ImageDraw.Draw(img).ellipse([size / 2 - r, size / 2 - r, size / 2 + r, size / 2 + r], fill=col + (a,))
-    save(img, "intro/ember.png")
+    save(img, "intro/ember.webp")
 
 
-def title_logo(subtitle="THE ORIGIN OF FIRE", path="intro/title.png"):
+def title_logo(subtitle="THE ORIGIN OF FIRE", path="intro/title.webp"):
     """The title: TIETÄJÄ in burnished gold with a dark outline and an inner glow, and the
     subtitle between two thin gilt rules. Without a subtitle, it's the menu's logo: just
     the name, cropped close."""
@@ -1827,7 +1835,7 @@ def shadow_sprite():
     img = img.filter(ImageFilter.GaussianBlur(s(0.6)))
     out = Image.new("RGBA", img.size, (24, 18, 10, 255))
     out.putalpha(img)
-    save(out, "objects/shadow.png")
+    save(out, "objects/shadow.webp")
 
 
 def effect_sprites():
@@ -1838,10 +1846,10 @@ def effect_sprites():
             a = int(255 * (1 - r / (size / 2)) ** falloff)
             ImageDraw.Draw(img).ellipse([size / 2 - r, size / 2 - r, size / 2 + r, size / 2 + r], fill=color + (a,))
         return img
-    save(soft_dot(64, (255, 250, 230), 3.0), "effects/sparkle.png")
-    save(soft_dot(32, (255, 240, 200), 1.6), "effects/mote.png")
+    save(soft_dot(64, (255, 250, 230), 3.0), "effects/sparkle.webp")
+    save(soft_dot(32, (255, 240, 200), 1.6), "effects/mote.webp")
     smoke = soft_dot(128, (118, 112, 108), 1.3).filter(ImageFilter.GaussianBlur(4))  # woodsmoke shows against white cloud
-    save(smoke, "effects/smoke.png")
+    save(smoke, "effects/smoke.webp")
     for frame, lift in ((0, -1.0), (1, 0.7)):  # a distant swift: sickle wings, up and down
         img = Image.new("RGBA", (96, 48))
         d = ImageDraw.Draw(img)
@@ -1852,25 +1860,25 @@ def effect_sprites():
             d.polygon(front + back, fill=(42, 40, 52, 255))
         d.ellipse([41, 19, 55, 29], fill=(42, 40, 52, 255))
         d.polygon([(44, 27), (48, 36), (52, 27)], fill=(42, 40, 52, 255))  # forked tail
-        save(img.filter(ImageFilter.GaussianBlur(0.8)).resize((48, 24), Image.LANCZOS), f"effects/bird_{frame}.png")
-    save(soft_dot(32, (255, 255, 255), 1.2), "effects/spark.png")  # tinted to embers by the game
+        save(img.filter(ImageFilter.GaussianBlur(0.8)).resize((48, 24), Image.LANCZOS), f"effects/bird_{frame}.webp")
+    save(soft_dot(32, (255, 255, 255), 1.2), "effects/spark.webp")  # tinted to embers by the game
     img = Image.new("RGBA", (32, 24))  # a yellowing birch leaf
     d = ImageDraw.Draw(img)
     d.polygon([(2, 12), (12, 3), (26, 6), (30, 12), (26, 18), (12, 21)], fill=(196, 188, 70, 255))
     d.line([(2, 12), (28, 12)], fill=(150, 130, 50, 255), width=2)
-    save(img.filter(ImageFilter.GaussianBlur(0.5)), "effects/leaf.png")
+    save(img.filter(ImageFilter.GaussianBlur(0.5)), "effects/leaf.webp")
 
 
 def items():
-    painted_figure(lambda: bread(16, 16), "items/bread.png", 31, brushes=SMALL_BRUSHES)
-    painted_figure(lambda: button(16, 16), "items/button.png", 32, brushes=SMALL_BRUSHES)
-    painted_figure(spindle, "items/spindle.png", 33, brushes=SMALL_BRUSHES)
-    painted_figure(lambda: tinder(16, 16), "items/tinder.png", 34, brushes=SMALL_BRUSHES)
-    painted_figure(lambda: bread(14, 8), "objects/bread.png", 35, brushes=SMALL_BRUSHES)
-    painted_figure(lambda: button(6, 6), "objects/button.png", 36, brushes=SMALL_BRUSHES)
-    painted_figure(lambda: tinder(14, 8), "objects/tinder.png", 37, brushes=SMALL_BRUSHES)
+    painted_figure(lambda: bread(16, 16), "items/bread.webp", 31, brushes=SMALL_BRUSHES)
+    painted_figure(lambda: button(16, 16), "items/button.webp", 32, brushes=SMALL_BRUSHES)
+    painted_figure(spindle, "items/spindle.webp", 33, brushes=SMALL_BRUSHES)
+    painted_figure(lambda: tinder(16, 16), "items/tinder.webp", 34, brushes=SMALL_BRUSHES)
+    painted_figure(lambda: bread(14, 8), "objects/bread.webp", 35, brushes=SMALL_BRUSHES)
+    painted_figure(lambda: button(6, 6), "objects/button.webp", 36, brushes=SMALL_BRUSHES)
+    painted_figure(lambda: tinder(14, 8), "objects/tinder.webp", 37, brushes=SMALL_BRUSHES)
     for frame in range(FIRE_FRAMES):
-        painted_figure(lambda: fire(frame), f"objects/fire_{frame}.png", 40 + frame, brushes=SMALL_BRUSHES, rim=False)
+        painted_figure(lambda: fire(frame), f"objects/fire_{frame}.webp", 40 + frame, brushes=SMALL_BRUSHES, rim=False)
 
 # ---------------------------------------------------------------- tale II: the sauna spirit
 #
@@ -2124,7 +2132,7 @@ def intro_dusk():
             img.alpha_composite(layer)
     finally:
         H = base_h
-    save(img.convert("RGB"), "intro/dusk.png")
+    save(img.convert("RGB"), "intro/dusk.webp")
 
 
 def window_glow():
@@ -2150,7 +2158,7 @@ def window_glow():
     pd.rectangle([size / 2 - bar, y0, size / 2 + bar, y0 + wh], fill=(60, 30, 20, 255))
     pd.rectangle([x0, size / 2 - bar, x0 + ww, size / 2 + bar], fill=(60, 30, 20, 255))
     img.alpha_composite(pane.filter(ImageFilter.GaussianBlur(2)))
-    save(img, "intro/window.png")
+    save(img, "intro/window.webp")
 
 
 def eyes_image(w, h, open_=1.0, glow=1.0):
@@ -2178,25 +2186,25 @@ def eyes_image(w, h, open_=1.0, glow=1.0):
 
 
 def eyes():
-    save(eyes_image(512, 205), "intro/eyes.png")
+    save(eyes_image(512, 205), "intro/eyes.webp")
     # The keeper under the benches: open, glowing and dimming, and now and then a blink.
     for frame, (open_, glow) in enumerate(((1, 1), (1, 0.92), (1, 0.84), (1, 0.9), (1, 1), (1, 0.95), (0.45, 0.8), (0.0, 0.6))):
-        save(eyes_image(s(20) * 2, s(8) * 2, open_, glow), f"objects/eyes_{frame}.png")
+        save(eyes_image(s(20) * 2, s(8) * 2, open_, glow), f"objects/eyes_{frame}.webp")
 
 
 def cards():
     """The menu's painted cards: each tale's opening scene at its most telling moment."""
-    night = Image.open(ASSETS / "intro/night.png").convert("RGBA")
+    night = Image.open(ASSETS / "intro/night.webp").convert("RGBA")
     crop = night.crop((0, night.height - 960, 1280, night.height))
-    ember = Image.open(ASSETS / "intro/ember.png").convert("RGBA").resize((115, 115))
+    ember = Image.open(ASSETS / "intro/ember.webp").convert("RGBA").resize((115, 115))
     crop.alpha_composite(ember, (s(INTRO_EMBER[0]) - 57, s(INTRO_EMBER[1]) - (night.height - 960) - 57))
-    save(crop.convert("RGB").resize((640, 480), Image.LANCZOS), "cards/fire.png")
-    dusk = Image.open(ASSETS / "intro/dusk.png").convert("RGBA")
+    save(crop.convert("RGB").resize((640, 480), Image.LANCZOS), "cards/fire.webp")
+    dusk = Image.open(ASSETS / "intro/dusk.webp").convert("RGBA")
     crop = dusk.crop((0, dusk.height - 960, 1280, dusk.height))
-    glow = Image.open(ASSETS / "intro/window.png").convert("RGBA").resize((141, 141))
+    glow = Image.open(ASSETS / "intro/window.webp").convert("RGBA").resize((141, 141))
     wx, wy = s((DUSK_WINDOW[0] + DUSK_WINDOW[2]) / 2), s((DUSK_WINDOW[1] + DUSK_WINDOW[3]) / 2)
     crop.alpha_composite(glow, (int(wx - 70), int(wy - (dusk.height - 960) - 70)))
-    save(crop.convert("RGB").resize((640, 480), Image.LANCZOS), "cards/sauna.png")
+    save(crop.convert("RGB").resize((640, 480), Image.LANCZOS), "cards/sauna.webp")
 
 
 # ---- rooms
@@ -2479,7 +2487,7 @@ def sauna_interior():
     light.alpha_composite(beam)
     mist(light, rng, 16, 26, 70, 0, 320, (120, 110, 120))  # smoke under the roof
     img.alpha_composite(light)
-    save(finish(img, rng, 0.03, (255, 150, 90)), "rooms/sauna.png")
+    save(finish(img, rng, 0.03, (255, 150, 90)), "rooms/sauna.webp")
 
 
 def shore():
@@ -2578,18 +2586,18 @@ def shore():
     shade(light, rng, [(0, 128), (320, 126), (320, 144), (0, 144)], 150, 20, color=DUSK_SHADE)
     light.alpha_composite(sunlight((s(236), s(70)), [(170, 6, 50), (178, 4, 60), (186, 5, 50), (194, 3, 40)], s(90), 130,
                                    (255, 170, 110)))
-    save_room(img, rng, "rooms/shore.png", sky_mask(open_sky, img), 0.1, light=light)
-    evening("rooms/shore.png", "rooms/shore.png", sun=(300, 80))
-    sunset_sky_layer("rooms/shore_sky.png", 104, horizon=0.5, clouds=8, sun_x=0.74)
+    save_room(img, rng, "rooms/shore.webp", sky_mask(open_sky, img), 0.1, light=light)
+    evening("rooms/shore.webp", "rooms/shore.webp", sun=(300, 80))
+    sunset_sky_layer("rooms/shore_sky.webp", 104, horizon=0.5, clouds=8, sun_x=0.74)
 
 
 def evening_rooms():
-    evening("rooms/village.png", "rooms/village_evening.png", window=(196, 66, 210, 77))
-    evening("rooms/path.png", "rooms/path_evening.png")
-    evening("rooms/grove.png", "rooms/grove_evening.png")
-    sunset_sky_layer("rooms/village_evening_sky.png", 105, horizon=0.6, sun_x=0.1)
-    sunset_sky_layer("rooms/path_evening_sky.png", 106, horizon=0.66, clouds=11, sun_x=0.1)
-    sunset_sky_layer("rooms/grove_evening_sky.png", 107, horizon=0.66, clouds=5, sun_x=0.1)
+    evening("rooms/village.webp", "rooms/village_evening.webp", window=(196, 66, 210, 77))
+    evening("rooms/path.webp", "rooms/path_evening.webp")
+    evening("rooms/grove.webp", "rooms/grove_evening.webp")
+    sunset_sky_layer("rooms/village_evening_sky.webp", 105, horizon=0.6, sun_x=0.1)
+    sunset_sky_layer("rooms/path_evening_sky.webp", 106, horizon=0.66, clouds=11, sun_x=0.1)
+    sunset_sky_layer("rooms/grove_evening_sky.webp", 107, horizon=0.66, clouds=5, sun_x=0.1)
 
 
 # ---- objects and items
@@ -2687,16 +2695,16 @@ def twigs(w, h, bound=False):
 
 def sauna_objects():
     eyes()
-    painted_figure(lambda: bucket(16, 16), "objects/bucket.png", 61, brushes=SMALL_BRUSHES)
-    painted_figure(lambda: bucket(16, 16), "items/bucket.png", 62, brushes=SMALL_BRUSHES)
-    painted_figure(lambda: bucket(16, 16, "water"), "items/water.png", 63, brushes=SMALL_BRUSHES)
-    painted_figure(lambda: feather(8, 4), "objects/feather.png", 64, brushes=SMALL_BRUSHES)
-    painted_figure(lambda: feather(16, 16), "items/feather.png", 65, brushes=SMALL_BRUSHES)
-    painted_figure(lambda: coin(6, 6), "objects/coin.png", 66, brushes=SMALL_BRUSHES)
-    painted_figure(lambda: coin(16, 16), "items/coin.png", 67, brushes=SMALL_BRUSHES)
-    painted_figure(lambda: twigs(16, 16), "items/twigs.png", 68, brushes=SMALL_BRUSHES)
-    painted_figure(lambda: twigs(16, 16, bound=True), "items/vihta.png", 69, brushes=SMALL_BRUSHES)
-    painted_figure(lambda: twigs(28, 14, bound=True), "objects/vihta.png", 70, brushes=SMALL_BRUSHES)
+    painted_figure(lambda: bucket(16, 16), "objects/bucket.webp", 61, brushes=SMALL_BRUSHES)
+    painted_figure(lambda: bucket(16, 16), "items/bucket.webp", 62, brushes=SMALL_BRUSHES)
+    painted_figure(lambda: bucket(16, 16, "water"), "items/water.webp", 63, brushes=SMALL_BRUSHES)
+    painted_figure(lambda: feather(8, 4), "objects/feather.webp", 64, brushes=SMALL_BRUSHES)
+    painted_figure(lambda: feather(16, 16), "items/feather.webp", 65, brushes=SMALL_BRUSHES)
+    painted_figure(lambda: coin(6, 6), "objects/coin.webp", 66, brushes=SMALL_BRUSHES)
+    painted_figure(lambda: coin(16, 16), "items/coin.webp", 67, brushes=SMALL_BRUSHES)
+    painted_figure(lambda: twigs(16, 16), "items/twigs.webp", 68, brushes=SMALL_BRUSHES)
+    painted_figure(lambda: twigs(16, 16, bound=True), "items/vihta.webp", 69, brushes=SMALL_BRUSHES)
+    painted_figure(lambda: twigs(28, 14, bound=True), "objects/vihta.webp", 70, brushes=SMALL_BRUSHES)
 
 
 WEB = ASSETS.parent / "web"  # files served beside the page: the favicon and app icons
@@ -2763,8 +2771,8 @@ def favicon():
 def titles():
     favicon()
     title_logo()
-    title_logo("THE SAUNA SPIRIT", "intro/title_sauna.png")
-    title_logo(None, "intro/logo.png")
+    title_logo("THE SAUNA SPIRIT", "intro/title_sauna.webp")
+    title_logo(None, "intro/logo.webp")
 
 
 def twinkle():
@@ -2791,7 +2799,7 @@ def twinkle():
     core = Image.new("RGBA", (n, n), (255, 246, 210, 255))
     core.putalpha(star.filter(ImageFilter.GaussianBlur(1.2)))
     img.alpha_composite(core)
-    save(img, "effects/twinkle.png")
+    save(img, "effects/twinkle.webp")
 
 
 def sauna_tale():
@@ -2811,13 +2819,13 @@ def first_tale():
     village()
     path()
     grove()
-    painted_figure(vilja_standing, "chars/vilja_stand.png", 11)
+    painted_figure(vilja_standing, "chars/vilja_stand.webp", 11)
     for frame in range(4):
-        painted_figure(lambda: vilja_walking(frame), f"chars/vilja_walk_{frame}.png", 15 + frame)
-    painted_figure(kyllikki, "chars/kyllikki.png", 12)
-    painted_figure(magpie, "chars/magpie.png", 13, brushes=SMALL_BRUSHES)
+        painted_figure(lambda: vilja_walking(frame), f"chars/vilja_walk_{frame}.webp", 15 + frame)
+    painted_figure(kyllikki, "chars/kyllikki.webp", 12)
+    painted_figure(magpie, "chars/magpie.webp", 13, brushes=SMALL_BRUSHES)
     effect_sprites()
-    painted_figure(skull, "objects/skull.png", 14, brushes=SMALL_BRUSHES)
+    painted_figure(skull, "objects/skull.webp", 14, brushes=SMALL_BRUSHES)
     shadow_sprite()
     items()
     intro_night()

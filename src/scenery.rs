@@ -11,7 +11,7 @@ use bevy::{
 };
 
 use crate::intro::Screen;
-use crate::levels::Levels;
+use crate::levels::{CurrentLevel, Levels};
 use crate::story::{Effect, EffectKind, Rect as RoomRect, ROOM_HEIGHT, ROOM_WIDTH};
 use crate::{Game, StoryRes, next_random, room_to_world};
 
@@ -25,8 +25,8 @@ pub struct SceneryPlugin;
 impl Plugin for SceneryPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<ShownRoom>()
-            .add_systems(Startup, (load_effect_art, preload_room_art, setup_snapshot))
-            .add_systems(OnEnter(Screen::Intro), clear_scenery)
+            .add_systems(Startup, (load_effect_art, setup_snapshot))
+            .add_systems(OnEnter(Screen::Intro), (clear_scenery, preload_room_art))
             .add_systems(Update, (sync_scenery, (drift_sky, breathe, animate_sprites, animate_effects, dissolve)).chain());
     }
 }
@@ -115,22 +115,21 @@ struct EffectArt {
     twinkle: Handle<Image>,
 }
 
-/// Every room's art, loaded at startup and held for the whole game. Otherwise a room's
-/// images would only be fetched on entering it (and dropped on leaving), showing the bare
-/// wall until they arrive.
+/// The chosen tale's art, loaded as its intro begins (so it arrives while the intro plays)
+/// and held until another tale is chosen. Otherwise a room's images would only be fetched
+/// on entering it (and dropped on leaving), showing the bare wall until they arrive. Only
+/// the one tale's, so the browser doesn't download every tale up front.
 #[derive(Resource)]
 struct RoomArt(#[allow(dead_code)] Vec<Handle<Image>>);
 
-fn preload_room_art(mut commands: Commands, assets: Res<AssetServer>, levels: Res<Levels>) {
-    let stories = levels.0.iter().map(|level| &level.story);
-    let paths = stories.flat_map(|story| {
-        let rooms = story.rooms.iter().flat_map(|room| {
-            std::iter::once(room.background.clone())
-                .chain(room.sky.clone())
-                .chain(room.hotspots.iter().flat_map(|h| h.sprite_frames()))
-        });
-        rooms.chain(story.items.iter().map(|item| item.icon.clone())).collect::<Vec<_>>()
+fn preload_room_art(mut commands: Commands, assets: Res<AssetServer>, levels: Res<Levels>, current: Res<CurrentLevel>) {
+    let story = &levels.0[current.0].story;
+    let rooms = story.rooms.iter().flat_map(|room| {
+        std::iter::once(room.background.clone())
+            .chain(room.sky.clone())
+            .chain(room.hotspots.iter().flat_map(|h| h.sprite_frames()))
     });
+    let paths = rooms.chain(story.items.iter().map(|item| item.icon.clone()));
     commands.insert_resource(RoomArt(paths.map(|path| assets.load(path)).collect()));
 }
 
@@ -310,17 +309,17 @@ fn dissolve(mut commands: Commands, time: Res<Time>, mut pictures: Query<(Entity
 
 fn load_effect_art(mut commands: Commands, assets: Res<AssetServer>) {
     commands.insert_resource(EffectArt {
-            sparkle: assets.load("effects/sparkle.png"),
-            mote: assets.load("effects/mote.png"),
-            smoke: assets.load("effects/smoke.png"),
-        spark: assets.load("effects/spark.png"),
-            leaf: assets.load("effects/leaf.png"),
-            glow: assets.load("intro/ember.png"),
-            bird: [assets.load("effects/bird_0.png"), assets.load("effects/bird_1.png")],
-            snow: assets.load("effects/snow.png"),
-            aurora: [0, 1, 2].map(|i| assets.load(format!("effects/aurora_{i}.png"))),
-            streak: assets.load("effects/fox_streak.png"),
-            twinkle: assets.load("effects/twinkle.png"),
+            sparkle: assets.load("effects/sparkle.webp"),
+            mote: assets.load("effects/mote.webp"),
+            smoke: assets.load("effects/smoke.webp"),
+        spark: assets.load("effects/spark.webp"),
+            leaf: assets.load("effects/leaf.webp"),
+            glow: assets.load("intro/ember.webp"),
+            bird: [assets.load("effects/bird_0.webp"), assets.load("effects/bird_1.webp")],
+            snow: assets.load("effects/snow.webp"),
+            aurora: [0, 1, 2].map(|i| assets.load(format!("effects/aurora_{i}.webp"))),
+            streak: assets.load("effects/fox_streak.webp"),
+            twinkle: assets.load("effects/twinkle.webp"),
     });
 }
 
