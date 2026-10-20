@@ -973,23 +973,14 @@ mod tests {
         let walk = |s: &mut GameState, target: &str| interact(&story, s, Verb::Walk, None, target);
         play(&story, &mut s, story.intro.as_deref().unwrap(), &[]);
 
-        // Mummo's tale, her box, and her snowshoes (only once she's been asked).
-        interact(&story, &mut s, Verb::Take, None, "snowshoes");
-        assert!(!has(&s, "snowshoes"));
+        // Mummo gives her snowshoes and an ember, and sends Vilja to Jussi.
         play(&story, &mut s, "talk_mummo", &["I'll go"]);
-        assert!(has(&s, "box") && s.flags.contains("knows_fox"));
-        interact(&story, &mut s, Verb::Take, None, "snowshoes");
-        assert!(has(&s, "snowshoes"));
+        assert!(has(&s, "snowshoes") && has(&s, "ember"));
+        let said = play(&story, &mut s, "talk_mummo", &["I'll go"]);
+        assert!(said.iter().any(|l| l.contains("talk to Jussi")), "she says what's next: {said:?}");
 
-        // Jussi's sum: three snares, doubling for four days, is 45, so one is missing.
-        play(&story, &mut s, "talk_jussi", &["Have you brought", "Forty-eight", "Have you brought", "Forty-five", "Goodbye"]);
-        assert!(s.flags.contains("knows_snare"));
-        play(&story, &mut s, "talk_jussi", &["You look hungry", "Goodbye"]);
-
-        // A fish from the lake for his puukko.
-        interact(&story, &mut s, Verb::Take, None, "line");
-        interact(&story, &mut s, Verb::Use, Some("line"), "hole");
-        interact(&story, &mut s, Verb::Use, Some("fish"), "jussi");
+        // Jussi's snares: three and two make five, and he gives his puukko.
+        play(&story, &mut s, "talk_jussi", &["Four", "Five"]);
         assert!(has(&s, "puukko"));
 
         // The fur from the snare coaxes the fox out; the knife frees it; the ember lights it.
@@ -997,24 +988,19 @@ mod tests {
         interact(&story, &mut s, Verb::Use, Some("fur"), "tail");
         assert!(s.flags.contains("fox_out"));
         interact(&story, &mut s, Verb::Use, Some("ember"), "grey");
-        interact(&story, &mut s, Verb::Use, Some("box"), "fire");
-        interact(&story, &mut s, Verb::Use, Some("ember"), "grey");
         assert!(!s.flags.contains("fox_lit"), "not with the wire still on");
         interact(&story, &mut s, Verb::Use, Some("puukko"), "grey");
         interact(&story, &mut s, Verb::Use, Some("ember"), "grey");
         assert!(s.flags.contains("fox_lit"));
         assert_eq!(s.room, "fell");
 
-        // The run, as the band goes on: from the bear, four hares, then the owl. A wrong step
+        // The run, as the band goes: from the bear, the hare, then the owl. A wrong step
         // sends the fox back to the bear.
-        walk(&mut s, "hare");
         walk(&mut s, "owl");
-        assert!(!s.flags.contains("run_1") && !s.won);
-        for _ in 0..4 {
-            walk(&mut s, "hare");
-        }
+        assert!(!s.won);
+        walk(&mut s, "hare");
         let said = play(&story, &mut s, "walk_owl", &["Whistle"]);
-        assert!(said.iter().any(|l| l.contains("Never whistle")));
+        assert!(said.iter().any(|l| l.contains("never whistle")));
         assert!(s.won);
     }
 }
