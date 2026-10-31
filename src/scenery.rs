@@ -115,12 +115,23 @@ struct EffectArt {
     twinkle: Handle<Image>,
 }
 
-/// The chosen tale's art, loaded as its intro begins (so it arrives while the intro plays)
-/// and held until another tale is chosen. Otherwise a room's images would only be fetched
-/// on entering it (and dropped on leaving), showing the bare wall until they arrive. Only
-/// the one tale's, so the browser doesn't download every tale up front.
+/// The chosen tale's art, loaded as its intro begins and held until another tale is
+/// chosen. Otherwise a room's images would only be fetched on entering it (and dropped on
+/// leaving), showing the bare wall until they arrive. Only the one tale's, so the browser
+/// doesn't download every tale up front. The intro waits for it before starting its music
+/// (decoding pictures while music plays makes it stutter in the browser).
 #[derive(Resource)]
-struct RoomArt(#[allow(dead_code)] Vec<Handle<Image>>);
+pub struct RoomArt(Vec<Handle<Image>>);
+
+impl RoomArt {
+    /// Every picture loaded (or failed to).
+    pub fn loaded(&self, assets: &AssetServer) -> bool {
+        self.0.iter().all(|handle| {
+            let state = assets.load_state(handle.id());
+            state.is_loaded() || state.is_failed()
+        })
+    }
+}
 
 fn preload_room_art(mut commands: Commands, assets: Res<AssetServer>, levels: Res<Levels>, current: Res<CurrentLevel>) {
     let story = &levels.0[current.0].story;

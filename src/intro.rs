@@ -12,6 +12,7 @@ use bevy::{
 
 use crate::SoundOn;
 use crate::levels::{CurrentLevel, Levels};
+use crate::scenery::RoomArt;
 
 #[derive(States, Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Screen {
@@ -126,7 +127,21 @@ struct Intro {
     leaving: Option<f32>,
     /// When the quiet title-screen loop started, if it has.
     title_loop: Option<f32>,
+    /// The opening's pictures and music, which load before the music starts.
+    preload: Vec<UntypedHandle>,
+    /// How long we've waited for them.
+    preload_waited: f32,
+    /// How long frames have come smoothly since they loaded.
+    smooth: f32,
+    /// Whether the music has been started.
+    started: bool,
 }
+
+/// The longest the opening waits on black for its pictures and music.
+const PRELOAD_SECONDS: f32 = 8.0;
+/// Once loaded, the music starts after this long without a frame over SMOOTH_FRAME seconds.
+const SMOOTH_SECONDS: f32 = 0.25;
+const SMOOTH_FRAME: f32 = 0.05;
 
 #[derive(Component)]
 struct IntroRoot;
@@ -185,8 +200,7 @@ impl Plugin for IntroPlugin {
     }
 }
 
-fn spawn_intro(mut commands: Commands, assets: Res<AssetServer>, sound: Res<SoundOn>, levels: Res<Levels>, level: Res<CurrentLevel>) {
-    commands.insert_resource(Intro { level: level.0, ..default() });
+fn spawn_intro(mut commands: Commands, assets: Res<AssetServer>, levels: Res<Levels>, level: Res<CurrentLevel>) {
     let def = &levels.0[level.0].intro;
     let clear = Color::NONE;
     let painting = commands
@@ -296,12 +310,53 @@ fn spawn_intro(mut commands: Commands, assets: Res<AssetServer>, sound: Res<Soun
             IntroRoot,
         ))
         .add_child(frame);
+    // Everything the opening shows, and its music. `advance` waits for all of it before
+    // starting the music: in the browser, decoding pictures while the music plays makes it
+    // stutter. (Loading a path again gives back the handle already loading.)
+    let images = [def.painting, def.title]
+        .into_iter()
+        .chain(def.glows.iter().map(|glow| glow.image))
+        .chain(def.wisps.iter().map(|wisps| wisps.image))
+        .chain(def.runners.iter().flat_map(|runner| runner.frames.iter().copied()));
+    let mut preload: Vec<UntypedHandle> = images.map(|path| assets.load::<Image>(path).untyped()).collect();
+    preload.push(assets.load::<AudioSource>(def.music).untyped());
+    commands.insert_resource(Intro { level: level.0, preload, ..default() });
+}
+
+/// Start the music once the opening's pictures and music have loaded, or after
+/// PRELOAD_SECONDS whatever is still missing (a slow file shouldn't hold it up for long).
+fn start_music(
+    commands: &mut Commands,
+    assets: &AssetServer,
+    def: &IntroDef,
+    intro: &mut Intro,
+    room_art: Option<&RoomArt>,
+    sound: &SoundOn,
+    dt: f32,
+) -> bool {
+    if intro.started {
+        return true;
+    }
+    intro.preload_waited += dt;
+    // The tale's rooms too, which start loading with the intro.
+    let loaded = intro.preload.iter().all(|handle| {
+        let state = assets.load_state(handle.id());
+        state.is_loaded() || state.is_failed()
+    }) && room_art.is_none_or(|art| art.loaded(assets));
+    // Then let the first frames' one-off work pass (textures going to the GPU, shaders
+    // compiling for the tale's first room behind the intro): wait for a run of smooth frames.
+    intro.smooth = if loaded && dt < SMOOTH_FRAME { intro.smooth + dt } else { 0.0 };
+    if intro.smooth < SMOOTH_SECONDS && intro.preload_waited < PRELOAD_SECONDS {
+        return false;
+    }
+    intro.started = true;
     let volume = if sound.0 { INTRO_VOLUME } else { 0.0 };
     commands.spawn((
         AudioPlayer::new(assets.load(def.music)),
         PlaybackSettings::DESPAWN.with_volume(Volume::Linear(volume)),
         IntroMusic,
     ));
+    false // the music starts next frame
 }
 
 fn despawn_intro(mut commands: Commands, entities: Query<Entity, Or<(With<IntroRoot>, With<IntroMusic>, With<TitleMusic>)>>) {
@@ -311,17 +366,23 @@ fn despawn_intro(mut commands: Commands, entities: Query<Entity, Or<(With<IntroR
 }
 
 /// Keep the timeline in step with the music, which may take a moment to load.
+#[allow(clippy::too_many_arguments)]
 fn advance(
     mut commands: Commands,
     time: Res<Time>,
     assets: Res<AssetServer>,
+    sound: Res<SoundOn>,
     levels: Res<Levels>,
     level: Res<CurrentLevel>,
     mut intro: ResMut<Intro>,
+    room_art: Option<Res<RoomArt>>,
     music: Query<&AudioSink, With<IntroMusic>>,
 ) {
     let def = &levels.0[level.0].intro;
     let dt = time.delta_secs();
+    if !start_music(&mut commands, &assets, def, &mut intro, room_art.as_deref(), &sound, dt) {
+        return; // on black until everything has loaded
+    }
     if let Some(sink) = music.iter().next() {
         // Advance smoothly every frame. The music reports its position in coarse steps,
         // so only use it to pull the timeline back if it has really drifted.
@@ -366,7 +427,7 @@ fn input(
     let pressed = mouse.just_pressed(MouseButton::Left)
         || touches.iter_just_pressed().next().is_some()
         || keys.any_just_pressed([KeyCode::Space, KeyCode::Enter, KeyCode::Escape]);
-    if !pressed || intro.leaving.is_some() {
+    if !pressed || intro.leaving.is_some() || !intro.started {
         return;
     }
     if intro.time < def.hit - SKIP_LEAD {

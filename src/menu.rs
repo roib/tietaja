@@ -48,7 +48,16 @@ struct Menu {
     taps: (u32, f32),
     /// When the secret was entered, to say so for a moment.
     unlocked_at: Option<f32>,
+    /// The menu's pictures, the font and the music, which load before it fades in.
+    preload: Vec<UntypedHandle>,
+    /// How long we've waited for them.
+    preload_waited: f32,
+    /// Whether it has started fading in, with its music.
+    started: bool,
 }
+
+/// The longest the menu stays black waiting for its pictures and music.
+const PRELOAD_SECONDS: f32 = 8.0;
 
 #[derive(Component)]
 struct MenuRoot;
@@ -87,13 +96,12 @@ impl Plugin for MenuPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Unlocked>()
             .add_systems(OnEnter(Screen::Menu), spawn_menu)
-            .add_systems(Update, (input, animate).chain().run_if(in_state(Screen::Menu)))
+            .add_systems(Update, (start, input, animate).chain().run_if(in_state(Screen::Menu)))
             .add_systems(OnExit(Screen::Menu), despawn_menu);
     }
 }
 
 fn spawn_menu(mut commands: Commands, assets: Res<AssetServer>, levels: Res<Levels>, current: Res<CurrentLevel>) {
-    commands.insert_resource(Menu { selected: current.0, ..default() });
     let frame = commands.spawn((Node { position_type: PositionType::Absolute, overflow: Overflow::clip(), ..default() }, MenuFrame)).id();
     commands.entity(frame).with_children(|frame| {
         frame.spawn((
@@ -249,7 +257,31 @@ fn spawn_menu(mut commands: Commands, assets: Res<AssetServer>, levels: Res<Leve
             MenuRoot,
         ))
         .add_child(frame);
-    commands.spawn((AudioPlayer::new(assets.load(MUSIC)), PlaybackSettings::LOOP.with_volume(Volume::Linear(0.0)), MenuMusic));
+    // `start` waits for these before fading in and starting the music: in the browser,
+    // decoding pictures while the music plays makes it stutter. (Loading a path again gives
+    // back the handle already loading.)
+    let images = ["intro/night.webp", "intro/logo.webp"].into_iter().chain(levels.0.iter().map(|level| level.card));
+    let mut preload: Vec<UntypedHandle> = images.map(|path| assets.load::<Image>(path).untyped()).collect();
+    preload.push(assets.load::<Font>(crate::FONT).untyped());
+    preload.push(assets.load::<AudioSource>(MUSIC).untyped());
+    commands.insert_resource(Menu { selected: current.0, preload, ..default() });
+}
+
+/// Fade in and start the music once the menu's pictures, font and music have loaded, or
+/// after PRELOAD_SECONDS whatever is still missing.
+fn start(mut commands: Commands, time: Res<Time>, assets: Res<AssetServer>, mut menu: ResMut<Menu>) {
+    if menu.started {
+        return;
+    }
+    menu.preload_waited += time.delta_secs();
+    let loaded = menu.preload.iter().all(|handle| {
+        let state = assets.load_state(handle.id());
+        state.is_loaded() || state.is_failed()
+    });
+    if loaded || menu.preload_waited >= PRELOAD_SECONDS {
+        menu.started = true;
+        commands.spawn((AudioPlayer::new(assets.load(MUSIC)), PlaybackSettings::LOOP.with_volume(Volume::Linear(0.0)), MenuMusic));
+    }
 }
 
 fn despawn_menu(mut commands: Commands, entities: Query<Entity, Or<(With<MenuRoot>, With<MenuMusic>)>>) {
@@ -260,6 +292,9 @@ fn despawn_menu(mut commands: Commands, entities: Query<Entity, Or<(With<MenuRoo
 
 /// Start the selected tale, or shake its card if it isn't out yet.
 fn choose(menu: &mut Menu, levels: &Levels, unlocked: &Unlocked) {
+    if !menu.started {
+        return; // still black
+    }
     if levels.0[menu.selected].playable(unlocked.0) {
         menu.leaving = Some(0.0);
     } else {
@@ -337,6 +372,9 @@ fn animate(
     mut fade: Single<&mut BackgroundColor, With<MenuFade>>,
     mut music: Query<&mut AudioSink, With<MenuMusic>>,
 ) {
+    if !menu.started {
+        return; // black (the fade starts opaque) until `start`
+    }
     let dt = time.delta_secs();
     menu.time += dt;
     let t = menu.time;
